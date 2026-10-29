@@ -185,6 +185,7 @@ No background automation has been created. Status maintenance happens as part of
 ## 8. Main project and archived snapshot
 
 - **Main and authoritative project:** `C:\New folder\Desktop\collective101`.
+- **GitHub publishing branch:** `development` in `Azi6060/Collective101`. Publish future project updates to `origin/development`; do not commit or push project updates to `main`.
 - **Archived reference snapshot:** `C:\Users\azizk\Documents\Codex\2026-10-28\this-is-the-hackathon-i-am\outputs\collective101`.
 - The existing source archive under the old workspace's outputs is an earlier export, not the working source.
 
@@ -206,3 +207,4 @@ At each session: read this Desktop PROJECT_STATUS.md and AGENTS.md, inspect the 
 
 | 2026-10-29 | User selected the Desktop folder as the authoritative main project. Updated Desktop instructions/status and added redirects to the archived workspace. Retired workspace-to-Desktop synchronization. | Desktop runtime source hashes preserved; documentation checked in the Desktop folder. No tests rerun for this documentation-only change. Future source, tests, and status updates belong in the Desktop project. |
 | 2026-10-29 | Initialized the Desktop project as a Git repository and published it to the private `Azi6060/Collective101` repository. | Initial commit `2424f10` pushed successfully to `origin/main`. No runtime tests were rerun; this was repository setup only. |
+| 2026-10-29 | Created and published `development` from the current `main` baseline; designated it as the publishing branch for future updates. | `origin/development` exists and tracks the local `development` branch at `a97f2ef`. `main` was not changed. No runtime tests run; branch setup only. Next product work remains M2-B through M2-D. |
