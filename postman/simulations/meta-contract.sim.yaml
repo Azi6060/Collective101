@@ -1,0 +1,32 @@
+simulation: collective101-meta-contract
+routing: path
+mocks:
+  - name: meta-contract
+    routeKey: meta
+    origin:
+      - api.meta.ai
+    path: postman/mocks/meta-model/config.yaml
+  - name: unavailable
+    routeKey: unavailable
+    path: postman/mocks/meta-model/config.yaml
+    scenarios:
+      - overrides:
+          conditions:
+            error:
+              status_code: 503
+  - name: rate-limit
+    routeKey: rate-limit
+    path: postman/mocks/meta-model/config.yaml
+    scenarios:
+      - overrides:
+          conditions:
+            error:
+              status_code: 429
+  - name: slow
+    routeKey: slow
+    path: postman/mocks/meta-model/config.yaml
+    scenarios:
+      - overrides:
+          conditions:
+            latency:
+              delay_ms: 800

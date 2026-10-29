@@ -1,0 +1,37 @@
+purpose:
+  stands_in_for: The consumer subset of Meta Model API chat completions used by Collective 101; no inference.
+  unblocks: Local HTTP adapter, tool-loop, error-handling, and orchestration checks without a Meta key.
+assumptions:
+  - id: chat-completions-tool-envelope
+    status: supported
+    claim: The local adapter sends nested function definitions and returns tool messages referencing the corresponding assistant tool-call IDs.
+    reason: The request shape follows Meta's published tool-calling example, and the actual runtime completed the modeled exchange over HTTP.
+    verification: On 2026-10-29, tests/check_http_simulation.py completed a five-task mission through the real MetaProvider HTTP adapter against the Postman stand-in. It made 21 model requests and recorded 420 synthetic usage tokens. The simulation emitted request events for POST /v1/chat/completions. This establishes client behavior against this stand-in only.
+    source: collective101/provider.py; collective101/runtime.py; tests/check_http_simulation.py; https://dev.meta.ai/docs/tool-calling
+    updated_at: "2026-10-29"
+  - id: classified-provider-failures
+    status: supported
+    claim: In the scenarios exercised, the adapter classifies 503, 429, and connection timeouts as retryable and rejects invalid JSON and truncated output.
+    reason: The adapter was exercised over real HTTP against the configured error and latency conditions plus malformed/truncated stand-in responses.
+    verification: On 2026-10-29, all five failure checks in tests/check_http_simulation.py passed. The runtime task-reassignment and bounded-budget paths were separately exercised by the offline unit tests. No live Meta failure was induced or observed.
+    source: tests/check_http_simulation.py; postman/simulations/meta-contract.sim.yaml; postman/mocks/meta-model/default.js
+    updated_at: "2026-10-29"
+  - id: live-meta-compatibility
+    status: unknown
+    claim: The participant account can run the selected model through this adapter and complete the supported mission within its assigned limits.
+    reason: MODEL_API_KEY was not configured. Published documentation and a stand-in cannot establish live authorization, limits, or model behavior.
+    verification: No live Meta request was made. Configure MODEL_API_KEY and run an explicit meta-mode mission to resolve this claim.
+    source: collective101/provider.py; README.md live Meta mode; https://dev.meta.ai/docs/models
+    updated_at: "2026-10-29"
+  - id: stand-in-origin
+    status: supported
+    claim: The local mock is a project-maintained contract stand-in, not a published provider-owned mock.
+    reason: The mock was written from the primary tool-calling documentation and the caller's restricted needs.
+    verification: No authenticated owner-workspace search was performed. Orbit lookup was attempted but its hostname did not resolve. No existing Postman workspace was bound or modified.
+    source: postman/mocks/meta-model/default.js; contracts/meta-chat-completions.openapi.json
+    updated_at: "2026-10-29"
+fingerprints:
+  - id: local-milestone-1
+    date: "2026-10-29"
+    commit: null
+    cli: Postman CLI 1.75.0; Python 3.13.0; uncommitted local source.

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "collective101"
+version = "0.1.0"
+description = "An evidence-driven departmental agent organization"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+collective101 = "collective101.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["collective101*"]

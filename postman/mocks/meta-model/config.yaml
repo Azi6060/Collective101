@@ -1,0 +1,8 @@
+version: 1
+name: meta-model-contract
+description: Local contract stand-in for the Meta chat-completions subset used by Collective 101. No AI inference.
+origin: api.meta.ai
+interceptRequests: true
+scenarios:
+  - name: default
+    path: default.js
