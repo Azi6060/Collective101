@@ -6,7 +6,7 @@ from pathlib import Path
 from .agent_harness import AgentHarness, LeadershipBus, HumanInputRequired, RunPaused
 from . import org_contracts as contracts
 from .registry import build_roster, DEPARTMENT_MAP
-from .store import Store, encode, now
+from .store import Store, encode, now, CallBudgetExceeded
 from . import budgets
 from . import progress
 from . import repairs
@@ -116,45 +116,88 @@ class DepartmentOrganization:
                 for a in self.roster.values() if a['department'] == department and a['role'] != 'department_lead']
 
     def _cycle(self, run_id, mission):
-        call = lambda key, aid, phase, ctx, validator: self.harness.invoke(run_id,key,aid,phase,{'mission':mission,**ctx},validator)
+        repair_context=mission.get('_repair_context')
+        public_mission={key:value for key,value in mission.items() if not key.startswith('_')}
+        call = lambda key, aid, phase, ctx, validator: self.harness.invoke(run_id,key,aid,phase,{'mission':public_mission,**ctx},validator)
         send = lambda key, sender, recipient, kind, data: self.bus.send(run_id,key,sender,recipient,kind,data)
         proposals = {}
-        queue = list(mission.get('departments', DEPARTMENT_MAP))
-        while queue:
-            department = queue.pop(0)
-            if department in proposals:
-                continue
-            head = department+'-001'
-            send('brief:'+department,'director-001',head,'mission.brief',mission)
-            context = {'department':department, 'employees':self._employees(department),
-                       'available_capabilities':mission['allowed_capabilities'],'tool_catalog':ToolBroker(self.store,self.roster).catalog(),
-                       'instruction':'Ask what useful contribution this department can make. You may decline. Assign at most six tasks to appropriate employees. Assign optional tools in each task tools list only when useful; requires lists essential capabilities. Match tools to the employee eligible_tools and mission permissions. Request missing capabilities honestly.'}
-            proposals[department] = call('assess:'+department,head,'assess',context,
-                lambda v,d=department: contracts.proposal(v,d,self.roster))
-            send('proposal:'+department,head,'director-001','department.proposal',proposals[department])
-            queue.extend(d for d in proposals[department]['depends_on'] if d not in proposals)
-        # An explicit head-to-head council: each receives only leadership-authored proposals.
-        initial = proposals.copy()
-        for department in initial:
-            head = department+'-001'
-            peers = {d:p for d,p in initial.items() if d != department}
-            for peer, content in peers.items():
-                send('council:'+peer+':'+department,peer+'-001',head,'council.proposal',content)
-            proposals[department] = call('coordinate:'+department,head,'coordinate',{
-                'department':department,'employees':self._employees(department),'own_proposal':initial[department],
-                'head_proposals':peers,'instruction':'Revise or retain your proposal after discussing other heads proposals. Remove duplicated work. Declare department dependencies and use your own employees only. Decline if unnecessary.'},
-                lambda v,d=department: contracts.proposal(v,d,self.roster))
-            if set(proposals[department]['depends_on']) - set(initial):
-                raise ValueError('Council requested an unconsulted department; revise the mission shortlist')
-            send('coordinated:'+department,head,'director-001','department.coordinated',proposals[department])
-        chosen = call('select','director-001','select',{'proposals':proposals,
-            'instruction':'Select a coherent useful subset. Include every transitive department dependency; do not select a declined department. Verification will happen independently even if assurance does not propose deliverables.'},
-            lambda v: contracts.selection(v,proposals))
+        source_result=None
+        affected_tasks=set()
+        if repair_context:
+            source_run=self.inspect(repair_context['source_run_id'])
+            source_result=source_run['result']
+            if not source_result or source_run['status']!='blocked':
+                raise ValueError('Selective repair source is not a blocked run with review evidence')
+            proposals=source_result.get('proposals',{})
+            selected=source_result.get('selected_departments',[])
+            if not proposals or not selected:
+                raise ValueError('Selective repair source is missing its original department plan')
+            chosen={'departments':selected,'reason':'Preserve the original selected department plan during selective repair.'}
+            valid_tasks={(department,task['key']) for department,spec in proposals.items()
+                for task in spec.get('tasks',[])}
+            affected_tasks={(item['department'],item['key']) for item in repair_context.get('tasks',[])}
+            if (not affected_tasks or affected_tasks-valid_tasks
+                    or affected_tasks-{(department,task['key']) for department in selected
+                        for task in proposals[department].get('tasks',[])}):
+                raise ValueError('Selective repair scope does not match the original task plan')
+            source_reports=source_result.get('reports',{})
+        else:
+            queue = list(mission.get('departments', DEPARTMENT_MAP))
+            while queue:
+                department = queue.pop(0)
+                if department in proposals:
+                    continue
+                head = department+'-001'
+                send('brief:'+department,'director-001',head,'mission.brief',public_mission)
+                context = {'department':department, 'employees':self._employees(department),
+                           'available_capabilities':mission['allowed_capabilities'],'tool_catalog':ToolBroker(self.store,self.roster).catalog(),
+                           'instruction':'Ask what useful contribution this department can make. You may decline. Assign at most six tasks to appropriate employees. Assign optional tools in each task tools list only when useful; requires lists essential capabilities. Match tools to the employee eligible_tools and mission permissions. Request missing capabilities honestly.'}
+                proposals[department] = call('assess:'+department,head,'assess',context,
+                    lambda v,d=department: contracts.proposal(v,d,self.roster))
+                send('proposal:'+department,head,'director-001','department.proposal',proposals[department])
+                queue.extend(d for d in proposals[department]['depends_on'] if d not in proposals)
+            # An explicit head-to-head council: each receives only leadership-authored proposals.
+            initial = proposals.copy()
+            for department in initial:
+                head = department+'-001'
+                peers = {d:p for d,p in initial.items() if d != department}
+                for peer, content in peers.items():
+                    send('council:'+peer+':'+department,peer+'-001',head,'council.proposal',content)
+                proposals[department] = call('coordinate:'+department,head,'coordinate',{
+                    'department':department,'employees':self._employees(department),'own_proposal':initial[department],
+                    'head_proposals':peers,'instruction':'Revise or retain your proposal after discussing other heads proposals. Remove duplicated work. Declare department dependencies and use your own employees only. Decline if unnecessary.'},
+                    lambda v,d=department: contracts.proposal(v,d,self.roster))
+                if set(proposals[department]['depends_on']) - set(initial):
+                    raise ValueError('Council requested an unconsulted department; revise the mission shortlist')
+                send('coordinated:'+department,head,'director-001','department.coordinated',proposals[department])
+            chosen = call('select','director-001','select',{'proposals':proposals,
+                'instruction':'Select a coherent useful subset. Include every transitive department dependency; do not select a declined department. Verification will happen independently even if assurance does not propose deliverables.'},
+                lambda v: contracts.selection(v,proposals))
         order = contracts.topological({d:proposals[d]['depends_on'] for d in chosen['departments']})
-        reports, blockers, workers = {}, [], set()
-        for department in order:
+        if repair_context:
+            for artifact in self.store.query('SELECT * FROM org_artifacts WHERE run_id=? ORDER BY path',(repair_context['source_run_id'],)):
+                ref=(artifact['path'].split('/',1)[0],artifact['task_key'])
+                if ref in affected_tasks:
+                    continue
+                self.store.execute('INSERT INTO org_artifacts VALUES(?,?,?,?,?,?,?)',
+                    (run_id,artifact['id'],artifact['agent_id'],artifact['task_key'],artifact['path'],artifact['content'],artifact['sha256']))
+        reports, blockers, workers, replans = {}, [], set(), []
+        for department_index, department in enumerate(order):
             head = department+'-001'
             spec = proposals[department]
+            if repair_context and not any(item[0]==department for item in affected_tasks):
+                if department not in source_reports:
+                    raise ValueError('Selective repair source is missing an unaffected department report')
+                for task in spec['tasks']:
+                    if source_reports[department].get('employee_results',{}).get(task['key'],{}).get('status')=='produced':
+                        workers.add(task['assignee'])
+                head_report={**source_reports[department],'reused_from_run':repair_context['source_run_id']}
+                reports[department]=head_report
+                send('report:'+department,head,'director-001','department.report.reused',head_report)
+                for peer in order:
+                    if peer != department:
+                        send('progress:'+department+':'+peer,head,peer+'-001','department.progress',head_report)
+                continue
             send('selected:'+department,'director-001',head,'department.selected',{'reason':chosen['reason'],'proposal':spec})
             upstream = {d:reports[d] for d in spec['depends_on']}
             for peer, content in upstream.items():
@@ -166,48 +209,111 @@ class DepartmentOrganization:
                 agent_id = task['assignee']
                 dependencies = {k:outcomes[k] for k in task['depends_on']}
                 briefing = {'task':task,'head_briefing':upstream,'own_dependencies':dependencies}
-                send('assignment:'+department+':'+key,head,agent_id,'task.assignment',briefing)
-                missing = sorted(set(task['requires']) - set(mission['allowed_capabilities']))
-                broker=ToolBroker(self.store,self.roster)
-                ready={item['name'] for item in broker.catalog(agent_id) if item['available']}
-                missing += sorted(set(task['requires']) - {'draft_artifact'} - ready)
-                failed_dependencies = any(v['status'] == 'blocked' for v in dependencies.values()) or any(reports[d]['blockers'] for d in spec['depends_on'])
-                if missing or failed_dependencies:
-                    outcome = {'status':'blocked','summary':'Missing permitted capability or blocked dependency',
-                        'limitations':missing or ['Dependency is blocked'], 'capability_requests':missing,'artifacts':[]}
+                reused=bool(repair_context and (department,key) not in affected_tasks)
+                if reused:
+                    prior_outcomes=source_reports.get(department,{}).get('employee_results',{})
+                    if key not in prior_outcomes:
+                        raise ValueError('Selective repair source is missing an unaffected task result')
+                    outcome={**prior_outcomes[key],'reused_from_run':repair_context['source_run_id']}
+                    if outcome['status']=='produced':
+                        workers.add(agent_id)
                 else:
-                    workers.add(agent_id)
-                    outcome = call('work:'+department+':'+key,agent_id,'work',briefing,
-                        lambda v,t=task: contracts.worker_result(v,t))
-                evidence=self.store.query("SELECT name,arguments,result,created_at FROM org_tool_calls WHERE run_id=? AND substr(call_key,1,?)=? ORDER BY rowid",(run_id,len('work:'+department+':'+key+':tool:'),'work:'+department+':'+key+':tool:'))
-                for item in evidence:
-                    item['arguments']=json.loads(item['arguments']); item['result']=json.loads(item['result'])
-                observed={item['name'] for item in evidence if item['result']['status']=='ok'}
-                unobserved=set(task['requires'])-{'draft_artifact'}-observed
-                if outcome['status']=='produced' and unobserved:
-                    outcome={'status':'blocked','summary':'Required tool evidence is missing','limitations':sorted(unobserved),'capability_requests':sorted(unobserved),'artifacts':[]}
-                unavailable=[item['name']+': '+item['result']['status'] for item in evidence if item['result']['status'] not in {'ok','needs_input'} and item['name'] not in observed]
-                outcome={**outcome,'limitations':list(dict.fromkeys(outcome['limitations']+unavailable)),'tool_evidence':evidence}
+                    send('assignment:'+department+':'+key,head,agent_id,'task.assignment',briefing)
+                    missing = sorted(set(task['requires']) - set(mission['allowed_capabilities']))
+                    broker=ToolBroker(self.store,self.roster)
+                    ready={item['name'] for item in broker.catalog(agent_id) if item['available']}
+                    missing += sorted(set(task['requires']) - {'draft_artifact'} - ready)
+                    failed_dependencies = any(v['status'] == 'blocked' for v in dependencies.values()) or any(reports[d]['blockers'] for d in spec['depends_on'])
+                    if missing or failed_dependencies:
+                        outcome = {'status':'blocked','summary':'Missing permitted capability or blocked dependency',
+                            'limitations':missing or ['Dependency is blocked'], 'capability_requests':missing,'artifacts':[]}
+                    else:
+                        workers.add(agent_id)
+                        outcome = call('work:'+department+':'+key,agent_id,'work',briefing,
+                            lambda v,t=task: contracts.worker_result(v,t))
+                    evidence=self.store.query("SELECT name,arguments,result,created_at FROM org_tool_calls WHERE run_id=? AND substr(call_key,1,?)=? ORDER BY rowid",(run_id,len('work:'+department+':'+key+':tool:'),'work:'+department+':'+key+':tool:'))
+                    for item in evidence:
+                        item['arguments']=json.loads(item['arguments']); item['result']=json.loads(item['result'])
+                    observed={item['name'] for item in evidence if item['result']['status']=='ok'}
+                    unobserved=set(task['requires'])-{'draft_artifact'}-observed
+                    if outcome['status']=='produced' and unobserved:
+                        outcome={'status':'blocked','summary':'Required tool evidence is missing','limitations':sorted(unobserved),'capability_requests':sorted(unobserved),'artifacts':[]}
+                    unavailable=[item['name']+': '+item['result']['status'] for item in evidence if item['result']['status'] not in {'ok','needs_input'} and item['name'] not in observed]
+                    outcome={**outcome,'limitations':list(dict.fromkeys(outcome['limitations']+unavailable)),'tool_evidence':evidence}
                 outcomes[key] = outcome
-                send('result:'+department+':'+key,agent_id,head,'task.result',outcome)
+                if not reused:
+                    send('result:'+department+':'+key,agent_id,head,'task.result',outcome)
                 if outcome['status'] == 'blocked':
                     blockers.append({'department':department,'task':key,'reason':outcome['summary'],
                                      'capability_requests':outcome['capability_requests']})
-                for artifact in outcome['artifacts']:
-                    path = department+'/'+artifact['path']
-                    aid = department+':'+key+':'+artifact['path']
-                    payload = (run_id,aid,agent_id,key,path,artifact['content'],hashlib.sha256(artifact['content'].encode()).hexdigest())
-                    self.store.execute('INSERT OR IGNORE INTO org_artifacts VALUES(?,?,?,?,?,?,?)',payload)
-                    department_artifacts.append(aid)
+                if not reused:
+                    for artifact in outcome['artifacts']:
+                        path = department+'/'+artifact['path']
+                        aid = department+':'+key+':'+artifact['path']
+                        payload = (run_id,aid,agent_id,key,path,artifact['content'],hashlib.sha256(artifact['content'].encode()).hexdigest())
+                        self.store.execute('INSERT OR IGNORE INTO org_artifacts VALUES(?,?,?,?,?,?,?)',payload)
+                department_artifacts.extend(row['id'] for row in self.store.query(
+                    'SELECT id FROM org_artifacts WHERE run_id=? AND task_key=? AND path LIKE ? ORDER BY id',
+                    (run_id,key,department+'/%')))
             head_report = call('report:'+department,head,'report',{'department':department,
                 'employee_results':outcomes, 'artifact_ids':department_artifacts,
-                'instruction':'Collect every employee result, report actual progress, blockers and bounded improvements. Reference only supplied artifact IDs. Do not conceal failed tasks.'},
-                lambda v: contracts.report(v,department_artifacts))
+                'pending_departments':order[department_index+1:],
+                'support_request_available':not repair_context and not replans and bool(order[department_index+1:]),
+                'instruction':'Collect every employee result and report actual progress, blockers and bounded improvements. Reference only supplied artifact IDs. Do not conceal failed tasks. If useful, you may make one support_request to a department in pending_departments; explain the specific mission-relevant help needed. Omit support_request when none is useful or support_request_available is false.'},
+                lambda v: contracts.report(v,department_artifacts,order[department_index+1:],
+                    not repair_context and not replans and bool(order[department_index+1:])))
             # Runtime blockers cannot be erased by a positive narrative.
-            head_report = {**head_report,'tool_evidence':[e for v in outcomes.values() for e in v.get('tool_evidence',[])],'blockers':head_report['blockers'] + [b['task']+': '+b['reason'] for b in blockers if b['department']==department],
+            head_report = {**head_report,'employee_results':outcomes,'tool_evidence':[e for v in outcomes.values() for e in v.get('tool_evidence',[])],'blockers':head_report['blockers'] + [b['task']+': '+b['reason'] for b in blockers if b['department']==department],
                            'published_artifacts':self.store.query('SELECT id,path,content,sha256 FROM org_artifacts WHERE run_id=? AND path LIKE ? ORDER BY id',(run_id,department+'/%'))}
             reports[department] = head_report
             send('report:'+department,head,'director-001','department.report',head_report)
+            rejected_support=head_report.get('support_request_status')
+            if rejected_support:
+                send('support-outcome:'+department,'director-001',head,'department.support.outcome',rejected_support)
+                replans.append({'requested_by':department,'department':None,'reason':rejected_support['reason'],
+                    'related_task':None,'passive_insight':None,'employee_action_required':False,'status':'declined'})
+            support_request=head_report.get('support_request')
+            if support_request:
+                target=support_request['department']
+                target_head=target+'-001'
+                send('support-request:'+department+':'+target,head,target_head,'department.support.request',{
+                    'request':support_request,
+                    'report':{'summary':head_report['summary'],'blockers':head_report['blockers'],
+                        'artifact_ids':head_report['artifact_ids']}})
+                original_proposal=proposals[target]
+                try:
+                    response=call('replan:'+department+':'+target,target_head,'replan',{
+                        'department':target,'own_proposal':original_proposal,'support_request':support_request,
+                        'requesting_department':department,
+                        'requesting_report':{'summary':head_report['summary'],'blockers':head_report['blockers'],
+                            'artifact_ids':head_report['artifact_ids']},
+                        'instruction':"Decide whether to accept this request and provide a passive insight for the mission record, or decline it. An accepted insight must be a non-actionable observation of at most 500 characters about one existing task. It is not a work instruction, task context, assignment, or request for employees to act. Do not change any work, instructions, employees, task/dependency structure, tools, outputs, criteria or budgets."},
+                        lambda v,p=original_proposal: contracts.support_response(v,p))
+                except (HumanInputRequired,RunPaused,CallBudgetExceeded):
+                    raise
+                except (RuntimeError,ValueError,TypeError):
+                    response=None
+                if response is None:
+                    outcome={'status':'unavailable','reason':'The receiving head could not provide a valid scoped response; the original plan was retained.'}
+                    send('support-outcome:'+department,'director-001',head,'department.support.outcome',outcome)
+                    replans.append({'requested_by':department,'department':target,'reason':support_request['reason'],
+                        'related_task':None,'passive_insight':None,'employee_action_required':False,'status':'unavailable'})
+                else:
+                    if response['decision']=='accept':
+                        passive_insight=response['passive_insight']
+                        related_task=response['task_key']
+                        status='advisory'
+                    else:
+                        passive_insight=None
+                        related_task=None
+                        status='declined'
+                    send('support-replan:'+department+':'+target,target_head,head,'department.support.response',{
+                        'department':target,'decision':response['decision'],'reason':response['reason'],
+                        'related_task':related_task,'passive_insight':passive_insight,
+                        'employee_action_required':False})
+                    replans.append({'requested_by':department,'department':target,'reason':support_request['reason'],
+                        'outcome_reason':response['reason'],'related_task':related_task,
+                        'passive_insight':passive_insight,'employee_action_required':False,'status':status})
             for peer in order:
                 if peer != department:
                     send('progress:'+department+':'+peer,head,peer+'-001','department.progress',head_report)
@@ -227,7 +333,7 @@ class DepartmentOrganization:
         reviewer = assignment['reviewer_id']
         send('review-assignment',review_head,reviewer,'review.assignment',{'head_reports':reports,'acceptance_criteria':mission['acceptance_criteria']})
         verdict = call('review',reviewer,'review',{'head_reports':reports,'execution_evidence':execution_results,
-            'instruction':'Inspect observed execution evidence where provided. Independently inspect artifacts against every original criterion. Only recorded sandbox checks count as execution; deployment and external verification are unavailable. Give a reason and evidence for every criterion.'},
+            'instruction':'Inspect observed execution evidence where provided. Independently inspect artifacts against every original criterion. Only recorded sandbox checks count as execution; deployment and external verification are unavailable. Give a reason and evidence for every criterion. For each unmet criterion, cite the exact artifact path or artifact ID that demonstrates the failure so a bounded repair can target it.'},
             lambda v: contracts.review(v,mission['acceptance_criteria']))
         send('review-result',reviewer,review_head,'review.result',verdict)
         send('review-director',review_head,'director-001','verification.report',verdict)
@@ -238,15 +344,23 @@ class DepartmentOrganization:
             check_errors.append('Department heads reported unresolved blockers')
         retrospective = call('retrospective','director-001','retrospective',{
             'head_reports':reports,'independent_review':verdict,'runtime_check_errors':check_errors,'blocked_tasks':blockers,
+            'replans':replans,
             'instruction':'Integrate the evidence and propose bounded, measurable organizational improvements. These are hypotheses, not permission, promotion, or automatic self-modification.'},contracts.retrospective)
         for index, improvement in enumerate(retrospective['improvements']):
             send('improvement:'+str(index),'director-001',improvement['department']+'-001','improvement.proposed',improvement)
-        return {'accepted':verdict['accepted'] and not blockers and not check_errors and bool(artifacts),
+        result={'accepted':verdict['accepted'] and not blockers and not check_errors and bool(artifacts),
             'evidence_mode':self.provider.name,'scope':'Artifact review plus recorded JavaScript/SQL checks where requested; HTML checks are static; no deployment',
             'execution_results':execution_results,
             'consulted_departments':list(proposals),'selected_departments':chosen['departments'],'proposals':proposals,'reports':reports,
             'blocked_tasks':blockers,'reviewer':reviewer,'review':verdict,'check_errors':check_errors,
-            'retrospective':retrospective,'artifact_count':len(artifacts)}
+            'replans':replans,'retrospective':retrospective,'artifact_count':len(artifacts)}
+        if repair_context:
+            result['repair_scope']=[{'department':department,'key':key}
+                for department,key in sorted(affected_tasks)]
+            result['reused_tasks']=[{'department':department,'key':task['key']}
+                for department in order for task in proposals[department]['tasks']
+                if (department,task['key']) not in affected_tasks]
+        return result
 
     def _execute_checks(self, run_id, mission):
         progress.record(self.store,run_id,None,'checks')

@@ -13,6 +13,83 @@ class RepairProvider(DepartmentFixtureProvider):
         if ctx['phase']=='work' and ctx['mission'].get('repair_feedback'):
             value['artifacts'][0]['content']+=' CORRECTED'
         return Completion({'role':'assistant','content':json.dumps(value)})
+class SelectiveRepairProvider(DepartmentFixtureProvider):
+    def __init__(self):self.work_calls=[]
+    def complete(self,messages,tools=None):
+        ctx=json.loads(messages[1]['content']);value=json.loads(super().complete(messages,tools).message['content'])
+        if ctx['phase']=='assess' and ctx['department']=='research':
+            value['tasks']=[
+                {'key':'primary','title':'Draft the primary note','instructions':'Draft the primary note.',
+                 'assignee':'research-003','depends_on':[],'requires':['draft_artifact'],'outputs':['brief.md']},
+                {'key':'independent','title':'Draft an independent appendix','instructions':'Draft an independent appendix.',
+                 'assignee':'research-004','depends_on':[],'requires':['draft_artifact'],'outputs':['appendix.md']},
+                {'key':'dependent','title':'Draft dependent findings','instructions':'Use the primary note to draft findings.',
+                 'assignee':'research-005','depends_on':['primary'],'requires':['draft_artifact'],'outputs':['findings.md']},
+            ]
+        elif ctx['phase']=='work':
+            task_key=ctx['task']['key']
+            repairing=bool(ctx['mission'].get('repair_feedback'))
+            self.work_calls.append((repairing,task_key))
+            if repairing and task_key in {'primary','dependent'}:
+                value['artifacts'][0]['content']+=' CORRECTED'
+        return Completion({'role':'assistant','content':json.dumps(value)})
+
+class CrossDepartmentRepairProvider(DepartmentFixtureProvider):
+    def __init__(self):self.work_calls=[]
+    def complete(self,messages,tools=None):
+        ctx=json.loads(messages[1]['content']);department=ctx.get('department')
+        if ctx['phase']=='assess' and department=='research':
+            value={'decision':'contribute','reason':'FIXTURE: prepare primary and independent research.',
+                'depends_on':[],'tasks':[
+                    {'key':'primary','title':'Draft primary note','instructions':'Draft primary note.',
+                     'assignee':'research-003','depends_on':[],'requires':['draft_artifact'],'outputs':['brief.md']},
+                    {'key':'independent','title':'Draft independent appendix','instructions':'Draft independent appendix.',
+                     'assignee':'research-004','depends_on':[],'requires':['draft_artifact'],'outputs':['appendix.md']}]}
+        elif ctx['phase']=='assess' and department=='strategy':
+            value={'decision':'contribute','reason':'FIXTURE: plan from research.',
+                'depends_on':['research'],'tasks':[
+                    {'key':'options','title':'Compare options','instructions':'Use the research findings.',
+                     'assignee':'strategy-004','depends_on':[],'requires':['draft_artifact'],'outputs':['options.md']}]}
+        elif ctx['phase']=='work':
+            value=json.loads(super().complete(messages,tools).message['content'])
+            department=ctx['agent_id'].split('-',1)[0]
+            task_key=ctx['task']['key'];repairing=bool(ctx['mission'].get('repair_feedback'))
+            self.work_calls.append((repairing,department,task_key))
+            if repairing:value['artifacts'][0]['content']+=' CORRECTED'
+        else:
+            value=json.loads(super().complete(messages,tools).message['content'])
+        return Completion({'role':'assistant','content':json.dumps(value)})
+
+class SupportReplanProvider(DepartmentFixtureProvider):
+    def __init__(self,change_permissions=False,target='strategy',decision='accept',note=None):
+        self.change_permissions=change_permissions;self.target=target;self.decision=decision;self.note=note
+        self.replan_calls=0;self.strategy_instructions=[];self.strategy_passive_insights=[]
+    def complete(self,messages,tools=None):
+        ctx=json.loads(messages[1]['content'])
+        if ctx['phase']=='report' and ctx['department']=='research':
+            value=json.loads(super().complete(messages,tools).message['content'])
+            value['support_request']={'department':self.target,'reason':'Include the new accessibility finding in the pending options.'}
+        elif ctx['phase']=='replan':
+            self.replan_calls+=1
+            value={'decision':self.decision,'reason':'This response is recorded as passive insight only.',
+                'task_key':ctx['own_proposal']['tasks'][0]['key'] if self.decision=='accept' else None,
+                'passive_insight':self.note if self.note is not None else 'The accessibility finding may affect the options.' if self.decision=='accept' else ''}
+            if self.change_permissions:value['requires']=['web_search']
+        else:
+            value=json.loads(super().complete(messages,tools).message['content'])
+            if ctx['phase']=='work' and ctx['agent_id']=='strategy-004':
+                self.strategy_instructions.append(ctx['task']['instructions'])
+                self.strategy_passive_insights.append(ctx.get('passive_insight'))
+        return Completion({'role':'assistant','content':json.dumps(value)})
+
+class UnmappedReviewProvider(DepartmentFixtureProvider):
+    def complete(self,messages,tools=None):
+        ctx=json.loads(messages[1]['content']);value=json.loads(super().complete(messages,tools).message['content'])
+        if ctx['phase']=='review':
+            value['accepted']=False
+            value['criteria'][0]={'criterion':ctx['mission']['acceptance_criteria'][0],
+                'met':False,'evidence':'The deliverable is not sufficiently supported.'}
+        return Completion({'role':'assistant','content':json.dumps(value)})
 class Improvements(unittest.TestCase):
     def setUp(self):
         root=ROOT/'work/improvement-tests';root.mkdir(parents=True,exist_ok=True)
@@ -27,6 +104,159 @@ class Improvements(unittest.TestCase):
         self.assertEqual(self.org.inspect(ids[1])['mission']['acceptance_criteria'],mission()['acceptance_criteria'])
         used=budgets.inspect_budget(self.org.store,rid)['calls'];self.assertGreater(used,run['calls'])
         self.org.run(rid);self.assertEqual(budgets.inspect_budget(self.org.store,rid)['calls'],used)
+    def test_selective_repair_reruns_failed_task_and_dependents_only(self):
+        provider=SelectiveRepairProvider();self.org.provider=provider
+        rid=self.org.create(mission());run=self.org.run(rid)
+        self.assertEqual(run['status'],'reviewed',run['error'])
+        ids=repairs.run_ids(self.org.store,rid);self.assertEqual(len(ids),2)
+        original={row['path']:row['content'] for row in self.org.store.query(
+            'SELECT path,content FROM org_artifacts WHERE run_id=?',(ids[0],))}
+        repaired={row['path']:row['content'] for row in self.org.store.query(
+            'SELECT path,content FROM org_artifacts WHERE run_id=?',(ids[1],))}
+        self.assertEqual(original['research/appendix.md'],repaired['research/appendix.md'])
+        self.assertIn('CORRECTED',repaired['research/brief.md'])
+        self.assertIn('CORRECTED',repaired['research/findings.md'])
+        repair_calls=[key for repairing,key in provider.work_calls if repairing]
+        self.assertCountEqual(repair_calls,['primary','dependent'])
+        self.assertEqual(run['result']['repair_scope'],[
+            {'department':'research','key':'dependent'},{'department':'research','key':'primary'}])
+        self.assertEqual(run['result']['reused_tasks'],[{'department':'research','key':'independent'}])
+        self.assertEqual(self.org.store.query("SELECT COUNT(*) AS count FROM org_calls WHERE run_id=? AND phase='review' AND status='accepted'",
+            (ids[1],))[0]['count'],1)
+        self.assertEqual(self.org.store.query('SELECT content FROM org_artifacts WHERE run_id=? AND path=?',
+            (ids[0],'research/brief.md'))[0]['content'],original['research/brief.md'])
+    def test_selective_repair_includes_downstream_departments_only(self):
+        provider=CrossDepartmentRepairProvider();self.org.provider=provider
+        m=mission();m['departments']=['research','strategy']
+        rid=self.org.create(m);run=self.org.run(rid)
+        self.assertEqual(run['status'],'reviewed',run['error'])
+        ids=repairs.run_ids(self.org.store,rid);self.assertEqual(len(ids),2)
+        repair_calls=[(department,key) for repairing,department,key in provider.work_calls if repairing]
+        self.assertCountEqual(repair_calls,[('research','primary'),('strategy','options')])
+        self.assertEqual(run['result']['repair_scope'],[
+            {'department':'research','key':'primary'},{'department':'strategy','key':'options'}])
+        self.assertEqual(run['result']['reused_tasks'],[{'department':'research','key':'independent'}])
+        original={row['path']:row['content'] for row in self.org.store.query(
+            'SELECT path,content FROM org_artifacts WHERE run_id=?',(ids[0],))}
+        repaired={row['path']:row['content'] for row in self.org.store.query(
+            'SELECT path,content FROM org_artifacts WHERE run_id=?',(ids[1],))}
+        self.assertEqual(original['research/appendix.md'],repaired['research/appendix.md'])
+        self.assertIn('CORRECTED',repaired['strategy/options.md'])
+    def test_mid_mission_support_is_passive_and_never_reaches_worker(self):
+        provider=SupportReplanProvider();self.org.provider=provider
+        m=mission();m.update(departments=['research','strategy'],artifact_checks=[],max_repair_rounds=0)
+        rid=self.org.create(m);run=self.org.run(rid)
+        self.assertEqual(run['status'],'reviewed',run['error'])
+        self.assertEqual(provider.replan_calls,1)
+        self.assertEqual(len(provider.strategy_instructions),1)
+        self.assertEqual(provider.strategy_instructions[0],run['result']['proposals']['strategy']['tasks'][0]['instructions'])
+        self.assertIsNone(provider.strategy_passive_insights[0])
+        self.assertEqual(run['result']['replans'],[{
+            'requested_by':'research','department':'strategy',
+            'reason':'Include the new accessibility finding in the pending options.',
+            'outcome_reason':'This response is recorded as passive insight only.',
+            'related_task':'deliverable',
+            'passive_insight':'The accessibility finding may affect the options.',
+            'employee_action_required':False,'status':'advisory'}])
+        self.assertEqual(run['result']['proposals']['strategy']['tasks'][0]['requires'],['draft_artifact'])
+        messages=self.org.store.query("SELECT sender,recipient,kind FROM org_messages WHERE run_id=? AND kind LIKE 'department.support.%' ORDER BY rowid",(rid,))
+        self.assertEqual([(row['sender'],row['recipient'],row['kind']) for row in messages],[
+            ('research-001','strategy-001','department.support.request'),
+            ('strategy-001','research-001','department.support.response')])
+        response=json.loads(self.org.store.query("SELECT content FROM org_messages WHERE run_id=? AND kind='department.support.response'",(rid,))[0]['content'])
+        self.assertFalse(response['employee_action_required'])
+        self.assertIn('accessibility finding',response['passive_insight'])
+        self.assertEqual(self.org.store.query("SELECT COUNT(*) AS count FROM org_calls WHERE run_id=? AND phase='replan' AND status='accepted'",(rid,))[0]['count'],1)
+
+    def test_mid_mission_support_decline_keeps_original_plan_and_continues(self):
+        provider=SupportReplanProvider(decision='decline');self.org.provider=provider
+        m=mission();m.update(departments=['research','strategy'],artifact_checks=[],max_repair_rounds=0)
+        run=self.org.run(self.org.create(m))
+        self.assertEqual(run['status'],'reviewed',run['error'])
+        self.assertEqual(provider.strategy_instructions[0],run['result']['proposals']['strategy']['tasks'][0]['instructions'])
+        self.assertIsNone(provider.strategy_passive_insights[0])
+        self.assertEqual(run['result']['replans'][0]['status'],'declined')
+        self.assertEqual(run['result']['replans'][0]['passive_insight'],None)
+        message=self.org.store.query("SELECT content FROM org_messages WHERE kind='department.support.response'")[0]
+        self.assertEqual(json.loads(message['content'])['decision'],'decline')
+
+    def test_mid_mission_support_rejects_scope_expansion_and_preserves_original_plan(self):
+        provider=SupportReplanProvider(note='x'*501);self.org.provider=provider
+        m=mission();m.update(departments=['research','strategy'],artifact_checks=[],max_repair_rounds=0)
+        run=self.org.run(self.org.create(m))
+        self.assertEqual(run['status'],'reviewed',run['error'])
+        self.assertEqual(run['result']['replans'][0]['status'],'unavailable')
+        self.assertIsNone(run['result']['replans'][0]['passive_insight'])
+        self.assertEqual(provider.strategy_instructions[0],run['result']['proposals']['strategy']['tasks'][0]['instructions'])
+        self.assertIsNone(provider.strategy_passive_insights[0])
+
+    def test_mid_mission_replan_cannot_expand_tool_permissions(self):
+        provider=SupportReplanProvider(change_permissions=True);self.org.provider=provider
+        m=mission();m.update(departments=['research','strategy'],artifact_checks=[],max_repair_rounds=0)
+        run=self.org.run(self.org.create(m))
+        self.assertEqual(run['status'],'reviewed',run['error'])
+        self.assertEqual(run['result']['replans'][0]['status'],'unavailable')
+        self.assertEqual(run['result']['proposals']['strategy']['tasks'][0]['requires'],['draft_artifact'])
+        self.assertEqual(provider.strategy_instructions[0],run['result']['proposals']['strategy']['tasks'][0]['instructions'])
+        self.assertIsNone(provider.strategy_passive_insights[0])
+
+    def test_mid_mission_replan_provider_failure_keeps_original_plan_and_continues(self):
+        from collective101.provider import ProviderError
+        class FailingHead(SupportReplanProvider):
+            def __init__(self):
+                super().__init__()
+                self.failed_attempts=0
+            def complete(self,messages,tools=None):
+                if json.loads(messages[1]['content'])['phase']=='replan':
+                    self.failed_attempts+=1
+                    raise ProviderError('provider request timed out',retryable=True)
+                return super().complete(messages,tools)
+        provider=FailingHead();self.org.provider=provider
+        m=mission();m.update(departments=['research','strategy'],artifact_checks=[],max_repair_rounds=0)
+        run=self.org.run(self.org.create(m))
+        self.assertEqual(run['status'],'reviewed',run['error'])
+        self.assertEqual(provider.failed_attempts,2)
+        self.assertEqual(run['result']['replans'][0]['status'],'unavailable')
+        self.assertEqual(provider.strategy_instructions[0],run['result']['proposals']['strategy']['tasks'][0]['instructions'])
+        self.assertIsNone(provider.strategy_passive_insights[0])
+        outcome=self.org.store.query("SELECT sender,kind,content FROM org_messages WHERE kind='department.support.outcome'")[0]
+        self.assertEqual((outcome['sender'],outcome['kind']),('director-001','department.support.outcome'))
+        self.assertIn('original plan was retained',json.loads(outcome['content'])['reason'])
+
+    def test_mid_mission_support_cannot_target_unselected_department(self):
+        self.org.provider=SupportReplanProvider(target='assurance')
+        m=mission();m.update(departments=['research','strategy'],artifact_checks=[],max_repair_rounds=0)
+        run=self.org.run(self.org.create(m))
+        self.assertEqual(run['status'],'reviewed',run['error'])
+        self.assertEqual(run['result']['replans'][0]['status'],'declined')
+        self.assertIn('selected department that has not started',run['result']['replans'][0]['reason'])
+        self.assertEqual(self.org.store.query("SELECT * FROM org_calls WHERE phase='replan'"),[])
+    def test_mid_mission_replan_resumes_after_head_authored_question(self):
+        class AskingHead(SupportReplanProvider):
+            def complete(self,messages,tools=None):
+                ctx=json.loads(messages[1]['content'])
+                if ctx['phase']=='replan' and not ctx['human_answers']:
+                    return Completion({'role':'assistant','content':json.dumps({
+                        'intervention':{'question':'Should the options include this finding?',
+                            'reason':'The answer changes how the pending options are compared.','options':[]}})})
+                return super().complete(messages,tools)
+        provider=AskingHead();self.org.provider=provider
+        m=mission();m.update(departments=['research','strategy'],artifact_checks=[],max_repair_rounds=0)
+        rid=self.org.create(m);run=self.org.run(rid)
+        self.assertEqual(run['status'],'needs_input',run['error'])
+        self.org.store.execute("UPDATE org_interventions SET status='answered',answer='Yes' WHERE run_id=?",(rid,))
+        run=self.org.run(rid)
+        self.assertEqual(run['status'],'reviewed',run['error'])
+        self.assertEqual(provider.replan_calls,1)
+        self.assertEqual(len(self.org.store.query("SELECT * FROM org_messages WHERE run_id=? AND kind='department.support.request'",(rid,))),1)
+        self.assertIsNone(provider.strategy_passive_insights[0])
+        self.assertEqual(run['result']['replans'][0]['status'],'advisory')
+    def test_unmapped_review_failure_stays_blocked_without_blind_repair(self):
+        self.org.provider=UnmappedReviewProvider();m=mission();m['artifact_checks']=[]
+        rid=self.org.create(m);run=self.org.run(rid)
+        self.assertEqual(run['status'],'blocked')
+        self.assertEqual(repairs.run_ids(self.org.store,rid),[rid])
+        self.assertIn('cannot safely identify',run['result']['repair_blocked_reason'])
     def test_failed_repair_is_bounded_and_does_not_create_success_memory(self):
         self.org.provider=DepartmentFixtureProvider();rid=self.org.create(mission());run=self.org.run(rid)
         self.assertEqual(run['status'],'blocked');self.assertEqual(len(repairs.run_ids(self.org.store,rid)),2)

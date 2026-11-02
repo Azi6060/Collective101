@@ -52,8 +52,15 @@ def lexical_score(query,content):
 def recall(store,agent_id,provider,run_id,query):
     rows=store.query('''SELECT run_id,content FROM org_experience WHERE agent_id=? AND provider=? AND run_id<>?
         ORDER BY rowid DESC LIMIT 100''',(agent_id,provider,run_id))
-    ranked=sorted(enumerate(rows),key=lambda pair:(-lexical_score(query,pair[1]['content']),pair[0]))
-    return [row for _,row in ranked[:3]]
+    ranked=sorted(
+        (
+            (index, row, lexical_score(query, row['content']))
+            for index, row in enumerate(rows)
+        ),
+        key=lambda item: (-item[2], item[0]),
+    )
+    ranked=[item for item in ranked if item[2] > 0]
+    return [row for _,row,_ in ranked[:3]]
 
 
 class ToolBroker:

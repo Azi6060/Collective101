@@ -1,6 +1,6 @@
 # Collective 101
 
-Main project: `C:\New folder\Desktop\collective101`.
+Main project: `C:\Users\justs\OneDrive\Documents\Desktop\collective101`.
 
 An AI organization with **101 individually configured agents: one Mission Director, ten department heads and ninety employees**. Heads decide whether they can contribute, coordinate with other heads, assign their own employees, collect results and report to the director. The runtime enforces the reporting hierarchy.
 
@@ -140,6 +140,9 @@ An agent definition contains its job-specific system prompt, responsibilities, r
 
 ```powershell
 python -m unittest discover -s tests -p 'test_*.py' -v
+python tests\run_heldout.py
+python tests\run_heldout_learning.py
+python tests\run_heldout_roles.py
 npm.cmd run test:sandbox
 # Starts an isolated local service with an injected test model; no real API spend:
 npm.cmd run test:ui
@@ -149,11 +152,13 @@ npm.cmd run test:browser
 npm.cmd run browser:inspect
 ```
 
+The held-out runners use deterministic fixtures only. They validate runtime and evidence-handling contracts, not live-model quality or demonstrated agent learning. The role audit checks all 101 definitions and role-phase boundaries; mission fixtures check small-team handoffs and outputs.
+
 ### Playwright MCP for development
 
 The official `@playwright/mcp` server (0.0.84) and MCP SDK (1.32.2) are pinned in the npm lockfile. Run `npm.cmd ci` after cloning; Node 24 and installed Google Chrome were used for verification. No browser download is needed on this machine. The server launches on demand over stdio with headless, isolated Chrome and closes when each command finishes.
 
-`test:browser` starts its own ephemeral loopback server and disposable SQLite state, injects the scripted test provider, and checks layout, greeting, activity hints, clarification/resume, organization and connector navigation. It does not target your running app or call a paid model. `browser:inspect` reads `/chat` and `/connectors` on `http://127.0.0.1:8765`, waits for application readiness and saves screenshots, snapshots and metrics under ignored `work/playwright/`. To inspect another local port, set `COLLECTIVE101_BROWSER_URL`. Inspection may record visible mission/connector names; keep these local artifacts private.
+`test:browser` starts its own ephemeral loopback server and disposable SQLite state, injects the scripted test provider, and checks layout across five views at seven mobile, tablet, laptop and desktop viewport sizes, plus accessibility smoke checks for landmarks, headings, control names, form labels, image alt text and the skip link. It also checks greeting, activity hints, clarification/resume, organization and connector navigation. It does not target your running app or call a paid model. These automated checks are not a full WCAG audit, assistive-technology test, or validation on physical devices. `browser:inspect` reads `/chat` and `/connectors` on `http://127.0.0.1:8765`, waits for application readiness and saves screenshots, snapshots and metrics under ignored `work/playwright/`. To inspect another local port, set `COLLECTIVE101_BROWSER_URL`. Inspection may record visible mission/connector names; keep these local artifacts private.
 
 `.codex/config.toml` also contains a project-scoped `playwright` MCP entry for this Desktop path. Native Codex tool loading requires opening this folder as a trusted project and restarting/reloading the client. During setup, the current client did **not** discover that entry (`codex mcp get playwright` returned not found); the SDK commands above were independently verified and work without native tool registration. No global trust settings were changed. See [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp).
 

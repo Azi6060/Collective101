@@ -1,8 +1,8 @@
 # Collective 101 - aim, implementation status, and next work
 
-Last reviewed: **2 November 2026 (Asia/Kuala_Lumpur)**.
-Current stage: **Reviewed-work runtime plus verified Playwright MCP browser testing, chat viewport layout and repeatable isolated UI checks**.
-Main project: **`C:\New folder\Desktop\collective101`**.
+Last reviewed: **3 November 2026 (Asia/Kuala_Lumpur)**.
+Current stage: **Reviewed-work runtime with task-selective repair, passive mid-mission support insights, and deterministic held-out coverage for small-team missions, all-101 role definitions/phase boundaries, memory retrieval/wiring, contribution recording, and responsibility evidence; live-model quality remains unverified**.
+Main project for this checkout: **`C:\Users\justs\OneDrive\Documents\Desktop\collective101`**.
 
 This is the sole living roadmap. Read it and AGENTS.md before every project work session; update before handoff. README.md owns usage, ARCHITECTURE.md design, GUARDRAILS.md policy, and VERIFICATION.md test history. Fixtures prove protocols, not live intelligence or a winning probability.
 
@@ -55,8 +55,8 @@ All 101 are addressable and fixture-invoked in protocol tests. **Live role usefu
 | Simple question/greeting | Agent may reply directly, with no department mission | Actual relevance depends on live model judgement |
 | Missing relevant intent | Agent emits contextual questions and reason; UI preserves authorship | At most three intake clarification rounds; no keyword/length triggers |
 | Complex mission | Agent supplies criteria, available capabilities and smallest useful shortlist | Model allocation quality still needs live assessment |
-| Department assessment | Selected heads assess/decline, dependencies activate omitted heads, one council round | Legacy JSON with no shortlist still consults all heads; no continuous replanning |
-| Director/team execution | Dependency-closed selection; heads assign employees/tools; failed review/checks can commission one revision by default, at most two | Same original criteria and shared budgets; no concurrent scheduler or self-hiring |
+| Department assessment | Selected heads assess/decline, dependencies activate omitted heads, one council round; during execution one head may request bounded context from a selected department that has not started | Legacy JSON with no shortlist still consults all heads; support can be declined or fail without changing the original plan |
+| Director/team execution | Dependency-closed selection; heads assign employees/tools; mapped review/check failures repair only affected tasks and dependents, one round by default and at most two | Unmappable review findings stay blocked; support notes are passive mission-record insights and are never passed to employees or applied to tasks; no concurrent scheduler or self-hiring |
 | Employee actions | Drafts, approved knowledge/memory, JavaScript and enabled connector tools | Permissions are identity/connector + mission + assignment intersections |
 | Human intervention during work | Requesting agent writes intervention; phase pauses, answer binds to it and work resumes | No automatic web-query or risk questionnaire; permission denials remain code-enforced |
 | Cooperation/review | Head aggregation/forwarding, independent non-producer Assurance reviewer, original criteria + observed checks | Positive narrative cannot override missing essential evidence or failed checks |
@@ -79,11 +79,57 @@ Answered simple chats support follow-up messages in the same conversation. Histo
 - Execution: existing QuickJS/WebAssembly plus SELECT-only in-memory SQL over supplied tables. SQL denies host databases/files, writes, attachments, pragmas, extension loading and unapproved functions; input/output/VM/time limits apply. SQL artifact acceptance checks compare actual rows. Static HTML structure checks load no resources and execute no scripts. Full browser/Python/OS execution remains pending.
 - Shared budgets: intake, department calls and every revision share a persistent ledger (up to 160 calls/2,000,000 conservative token-admission units). Failed/uncertain requests retain reservations. Four tool requests per phase, 40 recorded across root/revision runs. No exact tokenizer, dollar billing or tool-service cost cap.
 - UI: chat-only surface with a docked non-resizable composer that grows to 200 px then scrolls, separate recorded agent/phase/tool activity hints, collapsed mission details, pause/resume and activity links. Status-only updates preserve conversation DOM. Organization includes shared document ingestion and responsibility evidence. Version: **0.5-reviewed-work**.
-- Revisions: zero to two (default one), with unchanged criteria/capabilities, immutable per-attempt evidence, fresh independent review, shared budgets, root pause and active-revision human answers. Missing capability blockers do not blindly retry; changed connectors invalidate old access. Latest artifacts are shown while all attempts remain inspectable.
+- Revisions: zero to two (default one), with unchanged criteria/capabilities, immutable per-attempt evidence, fresh independent review, shared budgets, root pause and active-revision human answers. Repairs target tasks from failed artifact paths or reviewer-cited artifact IDs/paths, plus dependent tasks; accepted unrelated results/artifacts are reused unchanged with provenance. Unmappable review failures and missing-capability blockers remain blocked instead of triggering blind retries. Changed connectors invalidate old access. Latest artifacts are shown while all attempts remain inspectable.
+- Mid-mission support: one head-authored request can reach a selected department that has not started. The target may decline or record a passive insight of at most 500 characters, limited to head-to-head records and mission results; employees never receive it. It cannot change task instructions or trigger task work. Invalid responses/provider failures are recorded and the original plan continues. Assignments, departments, tools, dependencies, outputs, criteria and budgets stay fixed. No 48-hour wait is used: the call is synchronous and bounded by provider timeout/retries.
 - Responsibility: three distinct independently accepted live objectives with checked own artifacts beyond mere existence allow trusted_contributor; eight and no recent failures allow senior_contributor. Two failures in the last five records return the recommendation to developing. These are advisory task-assignment levels, not new role titles/tool grants. Fixtures do not qualify.
 - Evaluation: explicit live `evaluate --max-calls 80` command reuses the production intake prompt and records four routing cases, two specialist checks and a departmental JavaScript case against the same single-specialist checks. Reports include latency/calls/tokens and human-review requirements. Uses isolated state; no live evaluation run yet.
 
-## 5. Fresh verification (2 November 2026)
+## 5. Verification history
+
+### 3 November 2026: held-out mission pack and failed-check control
+
+- Added five predeclared fixture missions covering research/decision writing across three departments, JavaScript execution, read-only SQL over supplied data, static HTML structure, and a negative JavaScript case that must be blocked when runtime checks fail.
+- **5/5 held-out cases matched their expected outcomes**: four reviewed, one blocked; 60 scripted provider calls and six JavaScript/SQL checks were recorded. The three JavaScript checks and one SQL check passed; both checks on deliberately incorrect code failed and correctly blocked completion.
+- The focused held-out unittest passed. The full Python suite passed **111 tests in 74.590 s**, the QuickJS sandbox suite passed **8 tests in 6.613 s**, and the isolated jsdom/real-HTTP UI suite passed **7 tests in 12.827 s**.
+- `git diff --check` passed.
+- Evidence is deterministic fixture/runtime protocol testing. The provider responses and artifacts are scripted; this does not establish factual accuracy, live routing quality, agent specialization, memory benefit, or live-model competence. HTML validation is static, not a browser or accessibility audit. No live model/API or external connector was used.
+
+### 3 November 2026: held-out memory and responsibility coverage
+
+- Added twelve predeclared synthetic cases for raw memory relevance/scope/current-run exclusion, consolidated-card provenance and provider/identity isolation, actual agent-context delivery and retry snapshots, contribution evidence recorded from reviewed/failed fixture missions, and responsibility boundaries: fixture-only evidence, accepted plus checked own artifacts, three- and eight-objective thresholds, duplicate objectives, provider scoping, older failures, and two recent failures.
+- Tightened raw memory retrieval to omit zero-relevance episodes. The new held-out case showed that an unrelated recent episode could otherwise be included when fewer than three relevant results existed.
+- The memory-wiring case inspects the actual serialized agent input on both attempts: same-identity/provider memories are included, other scopes/current-run items are excluded, and new memory arriving after a retryable failure does not alter the frozen retry snapshot.
+- **12/12 held-out cases passed**. The complete Python suite passed **112 tests in 74.370 s**; the focused held-out unittest and runner passed; `git diff --check` passed. UI and QuickJS suites were not rerun because this change only extends deterministic Python harness tests.
+- End-to-end contribution checks confirmed that fixture-reviewed own work is marked accepted/checked but not live, while a failed artifact check is marked unaccepted/unchecked. Responsibility remains advisory only: synthetic records do not change role, reporting line, tool allowlist, or budgets. Evidence mode is deterministic fixture testing, not live agent learning, memory benefit, or live responsibility qualification. No live provider/API or external connector was used.
+
+### 3 November 2026: all-101 role audit and small-team missions
+
+- Added a deterministic audit over all 101 registered identities for exact roster and department counts, leadership/reporting hierarchy, role prompt uniqueness, nonempty skills/responsibilities, department capability ceilings, tool allowlists, and effective permission intersections.
+- Each identity was also checked for rejection of a phase outside its role; all 101 denials happened before any provider call.
+- Expanded held-out missions from five to seven with two additional two-department cases: engineering-to-operations release readiness and platform-to-assurance capability-boundary review. The mission tests now assert exact team selections, cross-department dependency edges, artifact paths, acceptance statuses, and runtime checks.
+- The all-101 audit passed with zero issues; all seven mission cases matched expected outcomes. Focused role and mission tests passed. The full Python suite passed **114 tests in 95.528 s**, and `git diff --check` passed.
+- This is deterministic definition/permission/protocol evidence. It does not show that live agents are useful specialists or that model-selected teams are optimal. No new agent capability was added; organization-agent browser/Python execution remains intentionally out of scope without a concrete need and secure runtime design.
+
+### 3 November 2026: safeguarded mid-mission support
+
+- The target head can explicitly decline or supply at most 500 characters of supplemental context for one existing task. At this stage the context was still forwarded to the worker, so the character cap did not prove workload neutrality; this behavior was superseded by passive-insight mode below.
+- Invalid/unauthorized support requests are recorded as declined. Provider/validation failures are recorded as unavailable and leave the original plan intact; the receiver's explicit decline also continues with the original plan. Normal agent-authored question/pause/resume behavior and shared budgets remain in force.
+- There is no 48-hour wait: this runtime makes the optional request synchronously and uses bounded provider timeout/retry behavior. The target head's claim that context fits current effort is not deterministic proof; semantic workload and helpfulness still need independent evaluation.
+- **23 focused improvement tests passed** in 13.315 s. **107 Python tests passed** in 78.437 s, excluding three Node-dependent sandbox cases. The unfiltered 110-test run had three environment failures because Node.js/npm were unavailable; `npm.cmd` sandbox/UI checks could not run. One intermediate rerun had a transient local HTTP-test connection abort; that test passed alone and the final full filtered rerun passed. Earlier same-day sandbox/UI passes below predate these safeguards and were not repeated.
+- Evidence is deterministic fixture/protocol testing. No live model or external connector was used.
+
+### 3 November 2026: passive-insight mode prevents phantom workload
+
+- The user selected “Advisory Mode (Passive Insight)” after noting that even supplemental context can implicitly increase employee effort.
+- Accepted support responses are now retained only in the head-to-head response and mission result as a passive insight tied to a related task. The runtime never adds the insight to an employee's briefing, task instructions, dependencies or output requirements. The result explicitly labels `employee_action_required` false.
+- The target may still decline; malformed replies and provider failures still leave the original plan unchanged. The support insight is advisory, not verified evidence or an instruction. The bounded request and its provider cost remain.
+- **23 focused improvement tests passed** in 12.574 s; **107 Python tests passed** in 77.405 s, excluding the same three Node-dependent sandbox tests. Python compile and `git diff --check` passed. npm sandbox/UI tests remain unavailable because Node.js/npm are absent; no live provider was used.
+- **Environment follow-up, later 3 November:** Node.js 24.20.0/npm 11.19.0 were already installed under the Windows user profile but missing from the tool process PATH. With the installed Node/Python folders added to PATH for the test processes, all **110 Python tests**, **8 QuickJS sandbox tests**, and **7 isolated jsdom/real-HTTP UI tests** passed. These remain fixture evidence, not live model evaluation.
+
+### Earlier 3 November 2026: initial mid-mission support
+
+- The initial implementation allowed the target head to revise existing task instructions. It enforced unchanged assignments, dependencies, tools and outputs and used normal pause/resume behavior. This version was superseded by the context-only safeguards above.
+- At that earlier point, 20 focused improvement tests, 107 Python tests, 8 QuickJS sandbox tests and 7 isolated jsdom/real-HTTP UI tests passed. These are historical results, not current reruns.
 
 Latest reviewed-work session: **100 Python tests passed** in the full suite (199.570 s, no failures/errors/skips); **7 jsdom/real-HTTP UI tests passed** (27.663 s); **8 QuickJS containment tests passed** (5.984 s). New checks cover correction/re-review with immutable first-attempt evidence, bounded budgets, repair interventions and pause, document dedup/path/size limits, provider/agent memory isolation, responsibility qualification/exclusion/decline, actual read-only SQL and forbidden access, static HTML, evaluation failure reporting, composer growth and separate status text without rebuilding message nodes. Logs: `work/verification/reviewed-work-python.log` and `reviewed-work-ui.log`; sandbox results in tool transcript. Thirty Python modules parsed; JavaScript syntax and whitespace checks passed. Browser inventory again unavailable. No live model or external connector call, account connection, commit or push occurred.
 
@@ -102,6 +148,12 @@ Earlier live-connectors implementation evidence:
 
 Evidence: work/verification/live-connectors-python.log and live-connectors-ui.log plus focused tool execution transcripts. Detailed historical results remain in VERIFICATION.md. Earlier 8-test QuickJS containment suite was not freshly rerun this session; current Python/UI tests did execute real JavaScript through the unchanged adapter.
 
+### 3 November 2026: selective repair implementation
+
+- Added task-level repair scope from deterministic failed artifact paths and reviewer evidence that names an exact artifact path or ID. Dependent tasks, including tasks in downstream departments, are included; unchanged task artifacts and outcomes are copied into a new immutable repair run, and the original selection/criteria/capabilities are retained.
+- A new independent review is required. An unmapped reviewer objection remains blocked with an explicit reason rather than rerunning the whole mission. Repair attempts continue to share the original budget and pause/intervention controls.
+- **16 focused improvement tests passed** in 25.273 s, including cross-department dependency propagation and unchanged independent artifacts. After installing user-scoped Node.js 24.20 and restoring the locked npm dependencies, **103 Python tests passed** (64.337 s), **8 QuickJS sandbox tests passed** (7.188 s), and **7 jsdom/real-HTTP UI tests passed** (13.839 s). UI used an isolated service and scripted provider. No live model inference or external connector was used.
+
 ## 6. Remaining work and next concrete step
 
 - [x] 101 individual identities, head-led contribution, selective live intake and scoped tools.
@@ -111,14 +163,20 @@ Evidence: work/verification/live-connectors-python.log and live-connectors-ui.lo
 - [x] Shared text ingestion, bounded memory consolidation and advisory responsibility evidence.
 - [x] SQL execution, SQL acceptance checks and static HTML checks alongside JavaScript.
 - [x] Repeatable live evaluation command, specialist/team comparison and failure/latency/token reporting.
+- [x] Selective repair of failed tasks and affected dependents; unrelated accepted task outcomes and artifacts are reused unchanged, with fresh review.
 - [ ] Run live evaluations once the user configures the model; assess answer/question relevance, head decisions and specialist usefulness independently across more mission families.
-- [ ] Validate memory benefit and responsibility thresholds against held-out cases; no measured improvement or earned live advancement yet.
+- [x] Deterministic held-out memory retrieval, provenance, provider-context delivery/retry snapshots, contribution recording, and responsibility threshold contracts.
+- [ ] Measure memory benefit and validate real responsibility outcomes with live/provider-generated held-out work; no measured improvement or earned live advancement yet.
+- [x] Deterministic all-101 role definition/permission audit and seven small-team held-out missions.
+- [ ] Evaluate live usefulness across roles and broader single-specialist/departmental baselines once a provider is configured.
 - [x] Development browser testing through Playwright MCP: desktop/mobile screenshots, viewport bounds, composer growth, greeting, activity hints, clarification flow and catalog/role inspection.
-- [ ] Organization-agent browser/app/Python execution; broader viewport/device coverage and full accessibility audit.
-- [ ] Selective repair of only affected tasks, general mid-mission head-to-head help/replanning, richer semantic retrieval and retention controls.
-- [ ] All-101 role evaluation and broader small-team/departmental baselines; hosted multi-user authentication if requested.
+- [x] Expanded isolated browser coverage across five views and seven mobile/tablet/laptop/desktop viewport sizes; added accessibility smoke checks for landmarks, headings, named controls, form labels, image alt text, and the skip link.
+- [ ] Full accessibility audit, assistive-technology and keyboard-only checks, color-contrast review, and broader physical-device/browser coverage. Organization-agent browser/Python execution is intentionally deferred until a concrete need and safe runtime boundary are established.
+- [x] One-round head-to-head support for a selected pending department, with decline/failure fallback and passive insights that are never forwarded to employees.
+- [ ] Broader multi-round replanning, new task/department proposals or task reassignment; richer semantic retrieval and retention controls.
+- [ ] Live usefulness across all 101 roles and broader small-team/departmental baselines; hosted multi-user authentication only if requested.
 
-**Next concrete step:** when the user's provider is ready for evaluation, run the bounded evaluation command, review the recorded outputs and compare single-specialist versus departmental results. Browser inspection now sees a configured-model indicator; no live evaluation was run in the browser-testing follow-up. Continue to distinguish protocol correctness from live quality. Use `test:browser` for future UI regressions and extend device/accessibility coverage as needed.
+**Next concrete step without a model key:** add deterministic boundary/edge-case tests for the existing runtime and held-out mission contracts. Keep larger replanning changes behind tested invariants and defer claims about semantic usefulness until live-provider evidence is available. When a live provider is configured and authorized, compare held-out task outcomes with and without retrieved memory, then assess passive support insight usefulness and single-specialist versus departmental results.
 
 ## 7. Current session handoff
 
@@ -132,12 +190,12 @@ Project `.codex/config.toml` is saved; this client/CLI did not discover the proj
 
 ## 8. Main project and archived snapshot
 
-- **Main and authoritative project:** `C:\New folder\Desktop\collective101`.
+- **Active project checkout for this chat:** `C:\Users\justs\OneDrive\Documents\Desktop\collective101`, cloned from `Azi6060/Collective101` on 3 November 2026 after the previously named `C:\New folder\Desktop\collective101` path was not available.
 - **GitHub publishing branch:** `development` in `Azi6060/Collective101`. Publish future project updates to `origin/development`; do not commit or push project updates to `main`.
 - **Archived reference snapshot:** `C:\Users\azizk\Documents\Codex\2026-10-28\this-is-the-hackathon-i-am\outputs\collective101`.
 - The existing source archive under the old workspace's outputs is an earlier export, not the working source.
 
-The user selected the Desktop folder as the main project on 29 October 2026. From this decision onward, all project implementation, tests, run-state changes, and updates to this living status file belong in the Desktop folder. There is no automatic two-way synchronization. Never overwrite the Desktop project using the archived workspace snapshot.
+The user selected a Desktop project folder on 29 October 2026. The requested location was not present in this session, so the user authorized cloning the GitHub project to the active checkout above. This chat's source edits, tests and status updates are confined to that clone; other chats/checkouts are unchanged. There is no automatic two-way synchronization. Never overwrite this checkout using the archived workspace snapshot.
 
 The chat's generated starting directory may still be under Documents/Codex. Its AGENTS.md redirects project work to this Desktop folder. Use the Desktop working directory explicitly for project commands and obtain any necessary filesystem access. Do not work on the archived source as a fallback.
 
@@ -149,6 +207,15 @@ At each session: read this Desktop PROJECT_STATUS.md and AGENTS.md, inspect the 
 
 | Date (MYT) | Work | Verification and remaining limits |
 | --- | --- | --- |
+| 2026-11-03 | Expanded isolated real-Chrome checks across all five UI views at seven viewport sizes (320x568 through 1440x1000), and added accessibility smoke checks for landmarks, page headings, accessible control names, form labels, image alt text and skip-link presence. Updated README scope and limitations. | `npm.cmd run test:browser`: 7/7 passed, including 35 view/viewport combinations and accessibility smoke checks; test service used disposable state and scripted provider. No live model/API or production chat action. This is not a full WCAG, assistive-technology, physical-device or cross-browser audit. `git diff --check` passed. |
+| 2026-11-03 | Added all-101 structural/permission evaluation and two new small-team mission fixtures for engineering/operations and platform/assurance; mission report now checks dependency edges. | 101 role definitions passed with zero issues; all 7 mission fixtures passed; focused role tests rejected unauthorized phases for all 101 without provider calls; full Python suite passed 114 tests. Fixture evidence only, not live specialist quality. |
+| 2026-11-03 | Added twelve held-out deterministic checks for memory retrieval/provenance, agent-context delivery and retry snapshots, end-to-end contribution evidence recording, and responsibility thresholds; raw memory now omits zero-relevance episodes. | 12/12 held-out checks, 112 Python tests, and `git diff --check` passed. UI/QuickJS suites were not rerun; this was a Python-only fixture change. Synthetic fixture evidence only; no live memory-benefit or competence claim. |
+| 2026-11-03 | Added a five-case held-out fixture pack covering cross-department research/writing, JavaScript, in-memory SQL, static HTML, and a deliberately incorrect JavaScript artifact that must be blocked. | All 5 cases matched their expected outcomes (4 reviewed, 1 blocked); 60 scripted calls, 6 execution checks. Full suite: 111 Python, 8 sandbox, and 7 UI tests passed. Fixture evidence only; no live model, external connector, browser audit, or competence claim. |
+| 2026-11-03 | Completed the previously blocked automated checks after locating the existing user-scoped Node.js installation and adding Node/Python to the test-process PATH. | All 110 Python tests, 8 QuickJS sandbox tests, and 7 isolated jsdom/real-HTTP UI tests passed. The UI service used scripted responses and disposable state; no live model, billable API, external connector, or production chat was used. |
+| 2026-11-03 | Switched accepted support responses to passive-insight mode: bounded notes are recorded for heads/mission history only and never enter employee work briefings or alter task content. Updated contracts, fixtures and documentation to make non-actionability explicit. | 23 focused improvement tests (12.574 s) and 107 Python tests (77.405 s; three Node-dependent cases excluded) passed; Python compile and diff checks passed. Sandbox/UI npm checks unavailable because Node/npm are not installed. Fixture evidence only; no live model/connector. |
+| 2026-11-03 | Replaced task-instruction edits with one capped supplemental context note for one pending task; added explicit decline, malformed-request rejection, and provider/validation-failure fallback to the original plan. Documented that synchronous provider timeouts replace a 48-hour wait and that semantic workload cannot be proven from a model attestation. | 23 focused tests passed; 107 Python tests passed with three Node-dependent cases excluded. The unfiltered 110-test run had three failures because Node/npm were unavailable; sandbox/UI commands could not run. Fixture evidence only; no live model or connector. |
+| 2026-11-03 | Added one-round head-led mid-mission support: a department may request help from a selected department not yet started; its head could adjust existing task instructions only. Added progress labeling, recorded head-to-head exchanges, pause/resume and permission-scope tests. | 20 focused improvement tests, 107 Python tests, 8 QuickJS sandbox tests and 7 isolated jsdom/real-HTTP UI tests passed. Provider interactions were deterministic fixtures; no live model or connector used. This initial instruction-edit implementation was superseded by the context-only safeguard above. |
+| 2026-11-03 | Cloned the latest published repository into the available Desktop project folder and implemented task-selective reviewed-work repair, preserving unaffected artifacts and rechecking task and department dependents. Updated the active checkout path and repair documentation. | 16 focused improvement tests, 103 Python tests, 8 actual QuickJS sandbox tests, and 7 isolated jsdom/real-HTTP UI tests passed. UI used a scripted provider; no live model or external connector was used. |
 | 2026-11-02 | Installed official Playwright MCP and SDK, saved project native-client config, added isolated real-Chrome tests and read-only screenshot command; fixed mobile chat composer overflow. | 5 MCP/Chrome tests + 7 DOM/HTTP tests passed; app screenshots inspected, zero console errors/warnings. Scripted model only. Native project entry still needs client trust/reload; no live quality or full accessibility claim. |
 | 2026-10-29 | Implemented the first local runtime, 101-profile registry, five-tool mission, scoped grants, verification, recovery, revision, Meta adapter, and exported reports. | Initial 21-test gate and local HTTP contract checks recorded in VERIFICATION.md. Live Meta execution unverified. |
 | 2026-10-29 | Copied the project to the user's Desktop. | All 53 files in the original handoff copy were hash-verified. The two folders remain separate. |

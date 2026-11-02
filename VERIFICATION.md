@@ -1,5 +1,76 @@
 # Mission console and JavaScript execution - 31 October 2026
 
+## 3 November 2026: expanded viewport and accessibility smoke coverage
+
+- Expanded isolated real-Chrome checks to all five UI views (overview, organization, chat, connectors and activity) at seven viewport sizes: 320x568, 360x640, 390x844, 768x1024, 1024x768, 1280x720 and 1440x1000. Assertions cover no horizontal overflow and chat composer visibility.
+- Added automated smoke checks for one main and navigation landmark, one page heading per view, accessible names for visible controls, labels for visible form controls, image alt attributes, and skip-link presence.
+- `npm.cmd run test:browser` passed **7/7 tests**, including all 35 view/viewport combinations. Tests used the isolated loopback service, disposable SQLite state and scripted provider; no live model/API or production chat action was used. `git diff --check` passed.
+- This is limited automated smoke coverage, not a full WCAG audit, screen-reader/assistive-technology or keyboard-only assessment, physical-device validation, or broad cross-browser certification.
+
+## 3 November 2026: held-out mission pack
+
+- Added five predeclared deterministic cases: a research/options/stakeholder brief spanning three departments, a JavaScript calculator with three sandbox assertions, a SQL summary with an exact result over supplied in-memory rows, a static HTML quickstart, and a deliberately incorrect JavaScript implementation expected to be blocked.
+- The repeatable runner reported **5/5 expected outcomes**: four reviewed and the negative control blocked. It recorded **60 scripted provider calls** and **6 runtime assertions**: three JavaScript and one SQL assertion passed; both incorrect-code assertions failed and blocked the mission. Missing/failed assertions cannot count as a successful negative control.
+- The focused held-out unittest passed. The full Python suite passed **111 tests in 74.590 seconds**; **8 QuickJS/WebAssembly sandbox tests passed in 6.613 seconds**; **7 jsdom + real-HTTP UI tests passed in 12.827 seconds** using the isolated service and scripted provider.
+- `git diff --check` passed.
+- A first run without Node.js on the process PATH correctly surfaced unavailable JavaScript execution and did not pass the held-out suite. The final runs included the already-installed Node.js 24.20.0 path; no package installation or manifest change was needed.
+- Evidence is deterministic fixture protocol/runtime testing only: all provider responses and work artifacts are scripted. This does not test live model inference, factual accuracy, independent role usefulness, memory benefit, or actual agent specialization. The HTML check is static, not browser or accessibility certification. No live API, external connector, or production chat action was used.
+
+## 3 November 2026: held-out memory wiring, contribution, and responsibility cases
+
+- Added twelve synthetic fixture cases: raw experience retrieval by relevance with identity/provider/current-run isolation and a three-result cap; consolidated-memory source deduplication, provenance, same-run exclusion and identity/provider isolation; serialized agent-context delivery and immutable memory snapshots across a retry; evidence recording from an accepted own artifact and a failed artifact check; and responsibility boundaries for fixture-only evidence, accepted-plus-checked artifacts, three distinct verified objectives, duplicate objective hashes, eight-objective senior threshold, recent-failure demotion, and provider-specific evidence.
+- The raw-recall fixture exposed that the function could return unrelated zero-score episodes when fewer than three matches existed. Retrieval now filters zero-score episodes before applying its three-result limit. The existing routing/memory tests were updated to assert the irrelevant episode is absent.
+- End-to-end contribution cases confirm fixture-reviewed own work is recorded accepted/checked with `live=0`, and a failed artifact check is recorded unaccepted/unchecked with `live=0`. Provider signatures remain intact and each evidence row points to the effective run.
+- The wiring check reads the serialized inputs saved for each actual harness attempt. It confirms the correct agent/provider's prior episode and card are sent, unrelated identity/provider and current-run evidence is excluded, and newly added memory after a retryable invalid response does not alter the retry's original memory snapshot.
+- **12/12 held-out cases passed** and the standalone runner printed expected results. The complete Python suite passed **112 tests in 74.370 seconds**; `git diff --check` passed. The QuickJS and UI suites were not rerun because this change only adds Python fixture coverage.
+- All provider and evidence records in this pack are synthetic. Results verify retrieval/provenance, context wiring/retry consistency, contribution recording, and threshold logic only; they do not prove memory improves outcomes, agents learned, or any live agent earned responsibility. Responsibility levels remain advisory and did not change role, reporting line, tool allowlist, or budgets. No live provider/API or external connector was used.
+
+## 3 November 2026: all-101 role definitions and small-team missions
+
+- Added a repeatable all-101 audit covering exact identities and counts, department membership, head/employee reporting lines, role classes, distinct prompts, required skills/responsibilities, department executable capability ceilings, tool allowlists, and effective tool permission intersections.
+- A phase-boundary test attempted one forbidden phase for each identity. All 101 raised `PermissionError`; no provider calls were made.
+- Expanded the mission pack from five to seven cases with two additional two-department fixtures: engineering → operations release readiness, and platform → assurance capability-boundary review. Tests and report assert selected departments, required outputs, declared dependency edges, acceptance status, and runtime checks.
+- The all-101 role runner passed with **101 identities and zero issues**; the seven-case mission runner passed **7/7**. Focused role tests passed **2 tests**, and focused mission tests passed **1 test**. The full Python suite passed **114 tests in 95.528 seconds**; `git diff --check` passed.
+- Evidence is deterministic fixture testing. It checks definitions and runtime boundaries, not live specialist quality, team optimality, or usefulness. No agent browser/Python capability, live model, or external connector was used.
+
+## 3 November 2026: passive-insight support safeguard
+
+- The user selected advisory/passive-insight mode to remove the phantom-workload risk. Accepted support responses are stored in the leadership message and mission result; `employee_action_required` is false and the note is never inserted into employee task briefings.
+- The task instructions, assignment, tools, criteria, dependencies and outputs remain unchanged. The support insight is not verified evidence or an instruction. Declines, malformed responses, bounded provider retries and original-plan fallback are preserved.
+- **23 focused improvement tests passed** in 12.574 s, including checks that the passive insight appears in the head/result records but not in the worker context, plus decline, invalid response, provider timeout and question/resume cases.
+- **107 Python tests passed** in 77.405 s, excluding the three Node-dependent sandbox tests. Python compile and `git diff --check` passed. npm sandbox/UI tests could not run because Node.js/npm were unavailable in this environment. No live model or external connector was used.
+
+## 3 November 2026: complete automated checks
+
+- The earlier checks could not find Node.js because its already-installed user-scoped directory was missing from this tool process's PATH. Located Node.js 24.20.0 and npm 11.19.0 and added the Node/Python install folders to the test process PATH; no new install or dependency change was needed.
+- **110 Python tests passed** in 69.462 s.
+- **8 QuickJS/WebAssembly sandbox tests passed** in 6.608 s. Checks include runtime isolation, no host APIs, incorrect results, infinite loops, memory limits, syntax errors, clean per-check state and invalid/excessive inputs.
+- **7 jsdom + real-HTTP UI tests passed** in 12.091 s using the disposable test service and scripted provider.
+- Evidence is deterministic test fixtures and isolated local integrations. No live model, billable API, external connector, or production chat action was used.
+
+## Earlier 3 November 2026: safeguarded mid-mission support
+
+- The target head may decline or accept a request by attaching at most 500 characters of supplemental context to one existing task. The context is separate from task instructions, which remain unchanged. Runtime cannot add or change tasks, employees, permissions, dependencies, outputs, criteria or budgets.
+- Invalid/unauthorized support requests are recorded as declined. Provider/validation failure is recorded as unavailable and the original plan continues. Explicit declines also preserve that plan. The optional provider call uses the shared budget and normal human-intervention/pause/resume behavior.
+- The runtime is synchronous and does not wait 48 hours. Provider timeout/retry behavior bounds the optional request. The receiver's model-authored effort/scope attestation is not proof that context cannot increase workload; material additional effort must be declined, and live behavior remains unverified.
+- **23 focused improvement tests passed** in 13.315 s, including decline, timeout after bounded retries, invalid scope/permission response fallback, unchanged task instructions, unselected-target rejection and pause/resume.
+- A filtered Python suite passed **107 tests** in 78.437 s, excluding three tests that require Node.js. The unfiltered run executed 110 tests and failed three because Node.js was unavailable: two directly reported sandbox-unavailable, and one routing/tool test consequently blocked. `npm.cmd` was not found, so sandbox and UI npm commands could not run. One intermediate rerun had a transient local HTTP-test connection abort; that test passed alone and the final full filtered rerun passed. Earlier same-day 8-sandbox/7-UI passes below are historical and predate these safeguards.
+- Evidence mode: deterministic fixtures/protocol simulation, not live model inference. No external connector or billable provider was used.
+
+## Earlier 3 November 2026: initial mid-mission support
+
+- The initial version allowed the receiving head to revise existing task instructions while freezing assignments, dependencies, tools and outputs. It recorded head-to-head messages and supported normal pause/resume. That instruction-edit behavior was replaced by capped context-only handoff, which was later replaced by passive insights above.
+- At that earlier point, **20 focused improvement tests, 107 Python tests, 8 QuickJS/WebAssembly sandbox tests, and 7 jsdom + real-HTTP UI tests passed** using deterministic fixtures. Those results are not fresh verification of the safeguards above.
+
+## 3 November 2026: task-selective repair
+
+- Added repair targeting from deterministic failed artifact paths and reviewer evidence citing an exact artifact path/ID. Repair scope includes dependent tasks whose inputs may have changed; other task outputs and outcomes are copied into a new immutable run with source-run provenance.
+- Added safeguards: original department plan, task assignments, criteria and capabilities are retained; every repair receives a fresh independent review; unmappable reviewer failures remain blocked instead of triggering a blind whole-mission rerun. Existing shared budget and pause/intervention behavior remain in force.
+- **16 focused improvement tests passed** in 25.273 seconds, including task/dependent-task selection across departments, unchanged independent artifacts, immutable original artifacts, fresh reviewer calls, shared budgets and unmappable-review blocking.
+- After installing user-scoped Node.js 24.20 and restoring the locked npm dependencies, the full Python suite passed: **103 tests in 64.337 seconds**. The first attempt before runtime setup had three Node/QuickJS-dependent failures; these passed on the completed rerun.
+- **8 QuickJS/WebAssembly sandbox tests passed** in 7.188 seconds. **7 jsdom + real-HTTP UI tests passed** in 13.839 seconds using a disposable local service and scripted provider. No live model inference, production chat write or external connector was used.
+- Repair tests are deterministic fixture/protocol evidence, not proof of live-agent effectiveness. Browser visual/accessibility checks and live model evaluation were not run.
+
 ## 2 November 2026: Playwright MCP browser follow-up
 
 - Installed official `@playwright/mcp` 0.0.84 and `@modelcontextprotocol/sdk` 1.32.2 as pinned development dependencies. npm reported zero vulnerabilities at installation. Node 24.14.0 and installed Chrome were used. MCP tool discovery, navigation, accessibility snapshots, read-only DOM evaluation, clicks, typing, viewport changes and screenshots all executed through the stdio MCP server.

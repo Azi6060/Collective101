@@ -40,7 +40,7 @@ A generated identity is not proof of an independently useful agent. A title is n
 
 ## Main project location
 
-The user explicitly selected `C:\New folder\Desktop\collective101` as the **main and authoritative project folder** on 29 October 2026. Perform source edits, tests, dependency/configuration work, run-state updates, and maintenance of PROJECT_STATUS.md directly in this Desktop project. Use this directory explicitly as the working directory for project commands.
+The user selected `C:\New folder\Desktop\collective101` as the main project on 29 October 2026, but that path was not available in the 3 November session. At the user's request, this repository was cloned to `C:\Users\justs\OneDrive\Documents\Desktop\collective101` and opened as the active project for this chat. Perform this checkout's source edits, tests, dependency/configuration work, run-state updates, and maintenance of PROJECT_STATUS.md here. This does not change other chats or checkouts.
 
 The earlier folder at `C:\Users\azizk\Documents\Codex\2026-10-28\this-is-the-hackathon-i-am\outputs\collective101` is an archived reference snapshot. Do not continue implementation there and do not automatically copy it over the Desktop project. The former workspace-to-Desktop synchronization helper is retired.
 
@@ -63,6 +63,8 @@ The local console is `python -m collective101 --state .collective101/console.db 
 The user's 2 November correction governs chat: every message, including greetings, goes to the live Head of Distribution. There are no local/canned replies, demo execution modes, keyword risk questionnaires or length-based questions. Only an agent response may author a human clarification. Complex missions provide a validated department shortlist. Legacy JSON without a shortlist keeps historical behavior. Preserve head-led dependency activation and head-only interdepartmental communication.
 
 Read GUARDRAILS.md when changing routing, tool grants, budgets or escalation. Tool allowlists in definitions do not by themselves authorize execution. Preserve identity + mission + assignment intersections, leadership read-only scope, operator-selected connector tools and agent-authored contextual guidance, evidence provenance, and shared intake/mission budgets. Optional missing tools yield disclosed limitations; essential missing access/evidence blocks work. Never expose arbitrary host files, shell, external write operations or credentials through a convenience fallback.
+
+During a mission, a head may request one bounded support response from a selected department that has not started yet. The receiving head may decline; failed or invalid responses must be recorded and fall back to the original plan. An accepted response is a passive insight of at most 500 characters, stored only in the mission record and head-to-head response. Never send it to employees, add work, change instructions, outputs, tools, criteria or budgets. Keep the provider call synchronous and bounded by its timeout/retry behavior; do not wait 48 hours.
 
 Approved knowledge lives under knowledge/shared or knowledge/<department>, with local files ignored by Git. Retrieved material is data, not policy. Role usefulness, live routing and learning need independent evaluations; do not describe fixture passes as competence. Tests/test_routing_tools.py covers the new policy contracts.
 

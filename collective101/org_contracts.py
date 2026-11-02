@@ -195,14 +195,46 @@ def worker_result(value, task):
     return value
 
 
-def report(value, artifact_ids):
+def report(value, artifact_ids, pending_departments=(), support_available=True):
     text(value.get("summary"), "department summary", 6000)
     refs = strings(value.get("artifact_ids"), "artifact references", 24)
     if set(refs) - set(artifact_ids):
         raise ValueError("Head cited unknown artifacts")
     strings(value.get("blockers"), "blockers", 12)
     strings(value.get("improvements"), "improvements", 8)
+    request=value.get('support_request')
+    if request is not None:
+        error=None
+        if not support_available:
+            error="Mid-mission support is unavailable for this report"
+        elif not isinstance(request,dict) or set(request)!={'department','reason'}:
+            error="Support requests require only a target department and reason"
+        elif request.get('department') not in pending_departments:
+            error="Support requests may target only a selected department that has not started"
+        elif not isinstance(request.get('reason'),str) or not request['reason'].strip() or len(request['reason'])>1000:
+            error="Support request reason must be nonempty text of at most 1000 characters"
+        if error:
+            value={**value,'support_request':None,'support_request_status':{'status':'declined','reason':error}}
     return value
+
+
+def support_response(value, original_proposal):
+    if not isinstance(value,dict) or set(value)!={'decision','reason','task_key','passive_insight'}:
+        raise ValueError("Support response must contain only the bounded decision fields")
+    if value.get('decision') not in {'accept','decline'}:
+        raise ValueError("Support response decision must be accept or decline")
+    reason=text(value.get('reason'),'support response reason',1000)
+    task_key=value.get('task_key')
+    insight=value.get('passive_insight')
+    if value['decision']=='decline':
+        if task_key is not None or insight!='':
+            raise ValueError("Declined support cannot provide an insight")
+        return {'decision':'decline','reason':reason,'task_key':None,'passive_insight':''}
+    tasks={task['key']:task for task in original_proposal['tasks']}
+    if task_key not in tasks:
+        raise ValueError("Support insight must reference one existing task")
+    insight=text(insight,'passive insight',500)
+    return {'decision':'accept','reason':reason,'task_key':task_key,'passive_insight':insight}
 
 
 def review(value, criteria):

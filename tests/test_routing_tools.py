@@ -142,7 +142,7 @@ class ToolTests(ConsoleCase):
             self.console.store.execute("INSERT INTO org_runs(id,provider,status,mission,roster,max_calls,created_at) VALUES(?,?,'reviewed','{}','{}',10,'test')",(rid,provider))
             self.console.store.execute('INSERT INTO org_experience VALUES(?,?,?,?)',(rid,aid,provider,encode({'summary':content})))
         rows=recall(self.console.store,'engineering-003','fixture','current','onboarding accessibility')
-        self.assertEqual([r['run_id'] for r in rows],['old','new'])
+        self.assertEqual([r['run_id'] for r in rows],['old'])
     def test_web_transport_is_bounded_and_does_not_follow_redirects(self):
         import io
         from collective101.agent_tools import web_search
