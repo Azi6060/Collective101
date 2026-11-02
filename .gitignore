@@ -7,3 +7,8 @@ runs/
 work/
 *.egg-info/
 postman/.dependencies/
+
+# Retained upstream checkout; pinned source and restore command in third_party/README.md
+third_party/agent-skills/
+
+node_modules/

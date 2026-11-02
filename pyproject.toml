@@ -14,3 +14,6 @@ collective101 = "collective101.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["collective101*"]
+
+[tool.setuptools.package-data]
+collective101 = ["departments/*/*.json", "web/*", "web/vendor/*", "execution/*.mjs"]

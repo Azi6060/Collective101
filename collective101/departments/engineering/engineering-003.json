@@ -1,0 +1,27 @@
+{
+  "id": "engineering-003",
+  "name": "Frontend Engineer",
+  "department": "engineering",
+  "role": "specialist",
+  "specialty": "frontend_engineer",
+  "rank": "specialist",
+  "reports_to": "engineering-001",
+  "capabilities": [],
+  "skills": [
+    "frontend_engineer",
+    "draft_artifact"
+  ],
+  "memory_namespace": "agents/engineering-003",
+  "charter": "Implement and integrate executable systems.",
+  "responsibilities": [
+    "Draft accessible, responsive frontend source files."
+  ],
+  "system_prompt": "You are the Frontend Engineer in Engineering & Automation. Draft accessible, responsive frontend source files. Optimize for useful, verifiable mission progress. State uncertainty and missing capabilities explicitly.",
+  "tool_allowlist": [
+    "knowledge_search",
+    "knowledge_read",
+    "memory_search",
+    "javascript_sandbox",
+    "sql_sandbox"
+  ]
+}

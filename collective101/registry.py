@@ -1,4 +1,6 @@
-"""A generated roster, not 101 independently maintained programs."""
+"""Load the editable, validated 101-agent organization definitions."""
+import json
+from pathlib import Path
 from dataclasses import asdict, dataclass
 
 
@@ -48,22 +50,45 @@ DEPARTMENT_MAP = {department.id: department for department in DEPARTMENTS}
 ROLES = ("coordinator", "specialist", "specialist", "specialist", "reviewer", "knowledge_curator")
 
 
-def build_roster() -> list[dict]:
-    agents = [{"id": "director-001", "department": "organization", "role": "mission_director",
-               "specialty": "mission_ownership", "rank": "lead", "capabilities": [],
-               "memory_namespace": "agents/director-001", "charter": "Own mission outcomes and resolve major conflicts."}]
-    for department in DEPARTMENTS:
-        for index in range(department.count):
-            agent_id = f"{department.id}-{index + 1:03}"
-            agents.append({"id": agent_id, "department": department.id,
-                           "role": "department_lead" if index == 0 else ROLES[(index - 1) % len(ROLES)],
-                           "specialty": department.specialties[index % len(department.specialties)],
-                           "rank": "lead" if index == 0 else "specialist",
-                           "capabilities": list(department.capabilities),
-                           "memory_namespace": f"agents/{agent_id}", "charter": department.charter})
-    if len(agents) != 101 or len({agent["id"] for agent in agents}) != 101:
-        raise RuntimeError("Organization must have exactly 101 unique identities")
-    return agents
+def build_roster(root=None) -> list[dict]:
+    root = Path(root) if root is not None else Path(__file__).parent / "departments"
+    agents = []
+    for path in sorted(root.glob("*/*.json")):
+        agent = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(agent, dict):
+            raise ValueError(f"Invalid agent definition: {path.name}")
+        for field in ("id", "name", "department", "role", "specialty", "rank", "memory_namespace", "charter", "system_prompt"):
+            if not isinstance(agent.get(field), str) or not agent[field].strip():
+                raise ValueError(f"Missing {field} in {path.name}")
+        if path.stem != agent["id"] or path.parent.name != agent["department"]:
+            raise ValueError("Agent identity must match its department folder and filename")
+        for field in ("capabilities", "skills", "responsibilities"):
+            if not isinstance(agent.get(field), list) or any(not isinstance(x, str) or not x for x in agent[field]):
+                raise ValueError(f"Invalid {field} in {path.name}")
+        if not agent["responsibilities"]:
+            raise ValueError("Each agent needs explicit responsibilities")
+        declared=agent.get('tool_allowlist',[])
+        if not isinstance(declared,list) or len(set(declared))!=len(declared) or any(t not in {'knowledge_read','knowledge_search','memory_search','web_search','javascript_sandbox','sql_sandbox'} for t in declared):
+            raise ValueError('Invalid agent tool allowlist')
+        agents.append(agent)
+    expected = {"director-001"} | {f"{d.id}-{i:03}" for d in DEPARTMENTS for i in range(1, d.count + 1)}
+    if len(agents) != 101 or {a["id"] for a in agents} != expected:
+        raise ValueError("Organization must have exactly the 101 expected unique identities")
+    for agent in agents:
+        if agent["id"] == "director-001":
+            if agent["role"] != "mission_director" or agent["department"] != "organization" or agent.get("reports_to") is not None:
+                raise ValueError("Invalid mission director hierarchy")
+            continue
+        department = DEPARTMENT_MAP[agent["department"]]
+        is_head = agent["id"] == department.id + "-001"
+        parent = "director-001" if is_head else department.id + "-001"
+        if agent.get("reports_to") != parent or (agent["role"] == "department_lead") != is_head:
+            raise ValueError("Exactly one head per department; employees report to their own head")
+        if not is_head and agent["role"] not in ROLES:
+            raise ValueError("Unknown employee role")
+        if not set(agent["capabilities"]).issubset(department.capabilities):
+            raise ValueError("Agent configuration cannot expand department executable permissions")
+    return sorted(agents, key=lambda a: (a["id"] != "director-001", a["id"]))
 
 
 def department_records() -> list[dict]:

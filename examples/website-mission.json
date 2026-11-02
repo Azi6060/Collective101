@@ -1,0 +1,32 @@
+{
+  "objective": "Build a draft accessible website with design, source, operating plan and maintenance documentation.",
+  "inputs": {
+    "fixture_scenario": "website",
+    "audience": "Hackathon judges"
+  },
+  "constraints": [
+    "Produce local draft files only. Do not deploy or claim tests were executed."
+  ],
+  "acceptance_criteria": [
+    "Provide a standalone HTML draft with accessible page structure.",
+    "Provide design, release and maintenance documentation."
+  ],
+  "allowed_capabilities": [
+    "draft_artifact"
+  ],
+  "artifact_checks": [
+    {
+      "type": "contains",
+      "path": "engineering/index.html",
+      "text": "<main>"
+    },
+    {
+      "type": "exists",
+      "path": "operations/release.md"
+    },
+    {
+      "type": "exists",
+      "path": "communications/README.md"
+    }
+  ]
+}

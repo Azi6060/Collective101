@@ -1,0 +1,7 @@
+[mcp_servers.playwright]
+command = "node"
+args = ["C:/New folder/Desktop/collective101/node_modules/@playwright/mcp/cli.js", "--browser", "chrome", "--headless", "--isolated", "--sandbox", "--block-service-workers", "--no-webmcp", "--ignore-roots", "--allowed-origins", "http://127.0.0.1:8765;http://localhost:8765", "--output-dir", "C:/New folder/Desktop/collective101/work/playwright"]
+cwd = "C:/New folder/Desktop/collective101"
+startup_timeout_sec = 30
+tool_timeout_sec = 60
+disabled_tools = ["browser_run_code_unsafe", "browser_file_upload", "browser_drop"]
