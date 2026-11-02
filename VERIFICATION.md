@@ -1,5 +1,12 @@
 # Mission console and JavaScript execution - 31 October 2026
 
+## 3 November 2026: development-branch review publication
+
+- Synced `development` with the current `main` baseline while preserving its prior branch commit, then committed and pushed the held-out runtime, mission, role-audit and browser-check work to `origin/development`. `main` was not changed.
+- Final validation on the development checkout: **114 Python tests passed** in 110.650 seconds; **8 QuickJS/WebAssembly sandbox tests passed** in 7.305 seconds; **7 isolated real-Chrome tests passed** in 88.591 seconds. The browser run covered 35 view/viewport combinations and accessibility smoke checks.
+- Tests used deterministic fixtures, an isolated disposable service and scripted provider responses. No live model/API, external connector, or production chat action was used. This does not establish live agent quality or full accessibility conformance.
+- `git diff --check` passed before publication. The branch is pushed for review; a pull request still needs to be opened in GitHub.
+
 ## 3 November 2026: expanded viewport and accessibility smoke coverage
 
 - Expanded isolated real-Chrome checks to all five UI views (overview, organization, chat, connectors and activity) at seven viewport sizes: 320x568, 360x640, 390x844, 768x1024, 1024x768, 1280x720 and 1440x1000. Assertions cover no horizontal overflow and chat composer visibility.
