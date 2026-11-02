@@ -1,0 +1,20 @@
+{
+  "name": "collective101-local-console",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:sandbox": "node --test tests/sandbox.test.mjs",
+    "test:ui": "python tests/run_ui.py",
+    "test:browser": "python tests/run_ui.py --browser",
+    "browser:inspect": "node scripts/inspect-browser.mjs"
+  },
+  "dependencies": {
+    "bootstrap": "5.3.8",
+    "quickjs-emscripten": "0.31.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@playwright/mcp": "0.0.84",
+    "jsdom": "26.1.0"
+  }
+}

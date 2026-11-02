@@ -1,0 +1,33 @@
+{
+  "objective": "Prepare a decision brief from supplied observations, compare approaches, and summarize recommendations.",
+  "inputs": {
+    "fixture_scenario": "research",
+    "observations": [
+      "Users need clearer setup instructions.",
+      "Support questions repeat after each release."
+    ]
+  },
+  "constraints": [
+    "Use supplied inputs. Mark additional assumptions."
+  ],
+  "acceptance_criteria": [
+    "Provide a research brief, options comparison and communication summary."
+  ],
+  "allowed_capabilities": [
+    "draft_artifact"
+  ],
+  "artifact_checks": [
+    {
+      "type": "exists",
+      "path": "research/brief.md"
+    },
+    {
+      "type": "exists",
+      "path": "strategy/options.md"
+    },
+    {
+      "type": "exists",
+      "path": "communications/summary.md"
+    }
+  ]
+}

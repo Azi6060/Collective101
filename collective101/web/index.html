@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Collective 101 · Mission control</title>
+<link rel="stylesheet" href="/vendor/bootstrap.min.css"><link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="app-shell">
+<aside class="sidebar" aria-label="Primary navigation">
+<a href="/" class="brand" data-nav="overview"><span class="brand-mark">C<span>101</span></span><span>Collective<span class="brand-sub">AN ORGANIZATION THAT THINKS</span></span></a>
+<div class="workspace-label">YOUR WORKSPACE <span class="workspace-dot"></span></div>
+<nav class="nav flex-column gap-1">
+<a href="/" data-nav="overview" class="nav-link active"><span class="nav-icon">◫</span> Overview</a>
+<a href="/organization" data-nav="organization" class="nav-link"><span class="nav-icon">▦</span> Organization <span class="nav-count">101</span></a>
+<a href="/chat" data-nav="chat" class="nav-link"><span class="nav-icon">▱</span> Mission chat</a>
+<a href="/connectors" data-nav="connectors" class="nav-link"><span class="nav-icon">?</span> Connectors</a>
+<a href="/activity" data-nav="activity" class="nav-link"><span class="nav-icon">≋</span> Activity & evidence</a>
+</nav>
+<div class="sidebar-rule"></div><div class="workspace-label">RECENT MISSIONS</div>
+<div id="recent-missions" class="recent-missions"><p class="muted-sidebar">Your missions will appear here.</p></div>
+<div class="sidebar-bottom"><div class="local-indicator"><span class="workspace-dot"></span> Local workspace</div><p>Your organization. Your machine.</p><span class="version-label">COLLECTIVE 101 / v0.4</span></div>
+</aside>
+<div class="main-shell">
+<header class="topbar"><div class="breadcrumb-label">Workspace <span>/</span> <strong id="breadcrumb">Overview</strong></div><div class="header-status"><span class="status-dot"></span><span id="connection-status">Connecting</span><span class="avatar">AK</span></div></header>
+<main id="main" tabindex="-1">
+<div id="notice" role="alert" class="alert alert-danger d-none"></div>
+<section id="view-overview" class="view">
+<div class="page-heading"><div><div class="eyebrow">MISSION CONTROL</div><h1>One organization.<br>A hundred and one minds.</h1><p class="lead-copy">Turn an ambitious request into coordinated, visible work.</p></div><button class="btn btn-primary new-mission">＋ New mission</button></div>
+<div class="metrics-grid">
+<div class="metric"><span>REGISTERED AGENTS</span><div>101 <small>across the organization</small></div><p>1 director · 10 heads · 90 employees</p></div>
+<div class="metric"><span>DEPARTMENTS</span><div>10 <small>working together</small></div><p>Specialized roles. Shared objectives.</p></div>
+<div class="metric"><span>MISSION ACTIVITY</span><div id="metric-active">0 <small>in progress</small></div><p id="metric-runs">No missions started yet</p></div>
+<div class="metric"><span>EXECUTION HARNESS</span><div class="metric-word" id="metric-sandbox">Checking</div><p>Isolated JavaScript · recorded results</p></div>
+</div>
+<div class="row g-4 mt-1">
+<div class="col-xl-8"><div class="panel start-panel"><div class="panel-top"><span class="mini-label">START WITH AN OUTCOME</span><span class="tag">Head-led collaboration</span></div><h2>What should we work on?</h2><p>Tell the director what you want to achieve. Department heads find their contribution, assign their teams, and report back.</p><button class="mission-prompt" id="start-chat">Describe a mission for your organization… <span>↗</span></button><div class="starter-buttons"><button class="btn btn-light starter" data-example="website">Build a website ↗</button><button class="btn btn-light starter" data-example="calculator">Test JavaScript ↗</button><button class="btn btn-light starter" data-example="research">Explore a decision ↗</button></div></div>
+<div class="panel mt-4"><div class="section-heading"><h2>Recent missions</h2><a href="/chat" data-nav="chat">Open chat ↗</a></div><div id="mission-list" class="empty-state"><span class="empty-symbol">◎</span><h3>A clear starting point.</h3><p>Start your first mission to see departments, decisions, and deliverables here.</p></div></div></div>
+<div class="col-xl-4"><div class="panel workflow-panel"><div class="mini-label">HOW WORK MOVES</div><h2>From intent to evidence.</h2><ol class="workflow"><li><span>01</span><div><strong>Clarify the mission</strong><p>Resolve the questions that matter.</p></div></li><li><span>02</span><div><strong>Bring in the right heads</strong><p>Departments propose useful work.</p></div></li><li><span>03</span><div><strong>Assign and execute</strong><p>Employees work within their roles.</p></div></li><li><span>04</span><div><strong>Review the evidence</strong><p>Independent checks precede acceptance.</p></div></li></ol><div class="readiness-box"><strong id="model-status">Checking model configuration</strong><p id="model-description">Provider availability is checked locally.</p></div></div></div>
+</div>
+</section>
+<section id="view-organization" class="view d-none">
+<div class="page-heading compact"><div><div class="eyebrow">THE ORGANIZATION</div><h1>Specialists, with a structure.</h1><p class="lead-copy">Explore departments, reporting lines, and every agent’s responsibilities.</p></div><span class="tag">101 identities · 10 departments</span></div>
+<div class="director-strip"><span class="agent-avatar director-avatar">MD</span><div><span class="mini-label">ORGANIZATION LEAD</span><h2>Mission Director</h2><p>Selects contributions, aligns heads, and owns the outcome.</p></div><button class="btn btn-outline-secondary" id="inspect-director">View role ↗</button></div>
+<div class="directory-toolbar"><label class="search-box"><span>⌕</span><input id="agent-search" class="form-control" type="search" placeholder="Search agents, roles, or departments" aria-label="Search organization"></label><span id="directory-count" class="text-secondary">10 departments</span></div>
+<div id="department-grid" class="department-grid"></div><div id="search-results" class="panel d-none"></div>
+<div id="agent-inspector" class="panel mt-4 d-none" tabindex="-1"></div>
+<details class="panel mt-4"><summary>Shared knowledge</summary><p class="small text-secondary mt-3">Add documents agents can search and read during their work. Retrieved text is sent to your configured model.</p><form id="knowledge-form"><label class="form-label" for="knowledge-file">UTF-8 document (TXT, MD, CSV or JSON, up to 64 KiB)</label><input class="form-control mb-3" id="knowledge-file" type="file" accept=".txt,.md,.csv,.json" required><button class="btn btn-outline-secondary" id="knowledge-upload">Add document</button></form><p id="knowledge-result" class="small mt-3" role="status"></p></details>
+</section>
+<section id="view-chat" class="view d-none">
+<div class="chat-toolbar"><h1>Mission chat</h1><span id="chat-status" class="tag">Ready</span><button class="btn btn-outline-secondary new-mission">New chat</button></div>
+<div class="mission-chat-surface">
+<div class="chat-utilities"><details id="mission-details"><summary>Mission details</summary><div id="brief-title" class="mini-label"></div><div id="brief-content"></div></details><div id="mission-controls" class="d-none"><button class="btn btn-link btn-sm" id="pause-mission">Pause</button><button class="btn btn-link btn-sm d-none" id="resume-mission">Resume</button><button class="btn btn-link btn-sm" id="view-evidence">View activity</button></div></div>
+<div id="chat-thread" class="chat-thread"><div id="chat-messages" class="chat-messages" role="log" aria-label="Conversation" aria-live="polite"></div><div id="intervention-area"></div></div>
+<div class="chat-compose-dock"><div id="chat-progress" class="chat-progress d-none" role="status" aria-live="polite" aria-atomic="true"><span class="activity-dot" aria-hidden="true"></span><span id="chat-progress-label"></span></div>
+<form id="mission-form" class="composer"><label for="mission-input" class="visually-hidden">Message your organization</label><textarea id="mission-input" class="form-control" rows="1" maxlength="12000" placeholder="Message your organization..." required></textarea><div class="composer-actions"><details class="chat-limits"><summary>Task limits</summary><div class="row g-2 mt-1"><label class="col-6" for="budget-calls">Model calls<input id="budget-calls" class="form-control" type="number" min="1" max="160" value="160" required></label><label class="col-6" for="budget-tokens">Token budget<input id="budget-tokens" class="form-control" type="number" min="4096" max="2000000" value="2000000" required></label></div></details><button id="send-mission" class="btn btn-primary" type="submit">Send</button></div><small id="mode-description"></small></form></div>
+</div></section>
+<section id="view-connectors" class="view d-none">
+<div class="page-heading compact"><div><div class="eyebrow">TOOLS &amp; CONNECTIONS</div><h1>Connect your organization's tools.</h1><p class="lead-copy">One connection for all 101 agents. Each agent uses the tools its work needs.</p></div><span class="tag">Shared across the organization</span></div>
+<div class="connector-toolbar"><label class="search-box"><span aria-hidden="true">&#8981;</span><input id="connector-search" class="form-control" type="search" placeholder="Search connectors" aria-label="Search connectors"></label><div class="connector-filters" role="group" aria-label="Filter connectors"><button type="button" class="btn active" data-connector-filter="all" aria-pressed="true">All connectors</button><button type="button" class="btn" data-connector-filter="available" aria-pressed="false">Available now</button><button type="button" class="btn" data-connector-filter="soon" aria-pressed="false">Coming soon</button></div></div>
+<div id="connector-catalog" class="connector-catalog" aria-label="Connector catalog"></div><p id="connector-empty" class="empty-state d-none" role="status">No connectors match your search. Try another name.</p>
+<p class="connector-note">Coming soon connectors are previews. They cannot access your accounts yet.</p>
+<section id="connector-setup" class="panel connector-setup d-none" aria-labelledby="connector-setup-title">
+<div class="section-heading"><h2 id="connector-setup-title">Set up a connection</h2><button class="btn btn-outline-secondary btn-sm" type="button" id="close-connector">Close setup</button></div>
+<form id="connector-form"><input id="connector-id" type="hidden"><input id="connector-kind" type="hidden">
+<div class="row g-3"><div class="col-md-6"><label class="form-label" for="connector-name">Connection name</label><input id="connector-name" class="form-control" maxlength="100" required></div>
+<div id="connector-url-field" class="col-md-6"><label class="form-label" for="connector-url">Endpoint URL</label><input id="connector-url" class="form-control" type="url" maxlength="2000"></div>
+<div id="connector-model-field" class="col-md-6"><label class="form-label" for="connector-model">Model name (optional)</label><input id="connector-model" class="form-control" maxlength="200" placeholder="Use configured default"></div>
+<div class="col-md-6"><label class="form-label" for="connector-secret">API key / bearer token</label><input id="connector-secret" class="form-control" type="password" autocomplete="new-password" maxlength="4096"></div></div>
+<p class="small text-secondary mt-3">Stored encrypted for your Windows user. Leave blank to keep a saved credential.</p>
+<label id="connector-local-field" class="d-none mb-3"><input id="connector-local" type="checkbox"> Allow an explicitly configured localhost MCP server</label>
+<p id="connector-kind-help" class="small text-secondary"></p><button class="btn btn-primary" type="submit" id="save-connector">Save connection</button>
+</form></section>
+<section class="connector-connections" aria-labelledby="saved-connectors-title"><div class="section-heading"><h2 id="saved-connectors-title">Your connections</h2><span class="small text-secondary">Available to all agents when enabled</span></div><div id="connector-list" aria-live="polite"><p class="text-secondary">Loading connections...</p></div></section>
+<details class="connector-note"><summary>How tools are used</summary><p class="mt-2">With a live model, agents can work from their roles, your context and approved local knowledge even when no external tools are connected. Enabled tools are shared across the organization; agents use them within the current mission and task permissions.</p><p>Custom MCP supports remote HTTP servers and selected read-only tools. OAuth sign-in, local command servers and write tools are not available yet. Connect only servers you trust.</p></details>
+</section>
+<section id="view-activity" class="view d-none">
+<div class="page-heading compact"><div><div class="eyebrow">OBSERVABILITY</div><h1>See what actually happened.</h1><p class="lead-copy">Recorded actions, leadership handoffs, artifacts, and execution evidence.</p></div><span id="activity-mode" class="tag">No mission selected</span></div>
+<div class="activity-toolbar"><label for="activity-mission">Mission</label><select id="activity-mission" class="form-select"><option value="">Select a mission</option></select><label for="activity-agent" class="visually-hidden">Agent</label><select id="activity-agent" class="form-select"><option value="">All agents</option></select><label for="activity-filter" class="visually-hidden">Filter activity</label><select id="activity-filter" class="form-select"><option value="calls">Agent actions</option><option value="messages">Leadership handoffs</option><option value="artifacts">Artifacts</option><option value="executions">Sandbox checks</option><option value="tools">Tool requests &amp; results</option></select></div>
+<div id="activity-summary" class="activity-summary"></div><div id="activity-content" class="panel empty-state"><h2>No activity to inspect yet.</h2><p>Start a mission or choose one from your history.</p></div>
+</section>
+<footer>COLLECTIVE 101 <span>Clarity in the mission. Evidence in the result.</span></footer>
+</main></div></div>
+</body></html>

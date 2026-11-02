@@ -1,0 +1,40 @@
+{
+  "objective": "Implement a pure JavaScript add(a,b) function, test it, and prepare operational documentation.",
+  "inputs": {
+    "fixture_scenario": "website",
+    "audience": "Hackathon judges"
+  },
+  "constraints": [
+    "Produce local draft files only. Do not deploy or claim tests were executed."
+  ],
+  "acceptance_criteria": [
+    "The generated add function passes positive, negative and zero input checks."
+  ],
+  "allowed_capabilities": [
+    "draft_artifact",
+    "javascript_sandbox"
+  ],
+  "artifact_checks": [
+    {
+      "type": "exists",
+      "path": "engineering/calculator.js"
+    }
+  ],
+  "execution_checks": [
+    {
+      "path": "engineering/calculator.js",
+      "expression": "add(2, 3)",
+      "expected": 5
+    },
+    {
+      "path": "engineering/calculator.js",
+      "expression": "add(-4, 1)",
+      "expected": -3
+    },
+    {
+      "path": "engineering/calculator.js",
+      "expression": "add(0, 0)",
+      "expected": 0
+    }
+  ]
+}
