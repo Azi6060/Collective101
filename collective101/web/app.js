@@ -1,9 +1,10 @@
 'use strict';
 const $ = id => document.getElementById(id);
+const t = text => window.CollectivePreferences.t(text);
 const state = {token:null,roster:null,health:null,chats:[],chat:null,activity:null,view:'overview',chatSignature:'',activitySignature:'',pendingRequest:null};
-const paths = {overview:'/',organization:'/organization',chat:'/chat',activity:'/activity',connectors:'/connectors'};
-const labels = {overview:'Overview',organization:'Organization',chat:'Mission chat',activity:'Activity & evidence',connectors:'Connectors'};
-function element(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;}
+const paths = {overview:'/',organization:'/organization',chat:'/chat',activity:'/activity',connectors:'/connectors',settings:'/settings'};
+const labels = {overview:'Overview',organization:'Organization',chat:'Mission chat',activity:'Activity & evidence',connectors:'Connectors',settings:'Settings'};
+function element(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;if(tag==='pre'||className?.split(' ').includes('message'))node.dir='auto';return node;}
 function pill(status){return element('span','state-pill '+status,status.replaceAll('_',' '));}
 function action(label,handler,classes='btn btn-outline-secondary btn-sm'){const button=element('button',classes,label);button.type='button';button.addEventListener('click',handler);return button;}
 function notice(message){$('notice').textContent=message;$('notice').classList.toggle('d-none',!message);}
@@ -11,19 +12,19 @@ async function api(path,body){
   const response=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'X-Console-Token':state.token,...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body)});
   const result=await response.json();if(!response.ok)throw new Error(result.error||'Request failed');return result;
 }
-function navigate(view,push=true){state.view=view;document.body.classList.toggle('chat-view',view==='chat');document.querySelectorAll('.view').forEach(node=>node.classList.toggle('d-none',node.id!=='view-'+view));document.querySelectorAll('[data-nav]').forEach(node=>node.classList.toggle('active',node.dataset.nav===view));$('breadcrumb').textContent=labels[view];if(push)history.pushState({},'',paths[view]);if(view==='activity')refreshActivity();if(view==='connectors')refreshConnectors();}
+function navigate(view,push=true){state.view=view;document.body.classList.toggle('chat-view',view==='chat');document.querySelectorAll('.view').forEach(node=>node.classList.toggle('d-none',node.id!=='view-'+view));document.querySelectorAll('[data-nav]').forEach(node=>{const active=node.dataset.nav===view;node.classList.toggle('active',active);if(active)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');});$('breadcrumb').textContent=t(labels[view]);if(push)history.pushState({},'',paths[view]);if(view==='activity')refreshActivity();if(view==='connectors')refreshConnectors();}
 function newMission(){state.chat=null;state.chatSignature='';state.pendingRequest=null;sessionStorage.removeItem('collective-chat');renderChat();navigate('chat');$('mission-input').focus();}
 function prettyAgent(id){return state.roster?.agents.find(agent=>agent.id===id)?.name||id;}
-function renderHealth(){const h=state.health;$('connection-status').textContent='Workspace connected ? '+(h.version||'older server');$('metric-sandbox').textContent=h.sandbox.available?'Ready':'Setup needed';$('model-status').textContent=h.live_configured?'Live model configured':'Connect a live model';$('model-description').textContent=h.live_configured?'Messages are sent to the live Head of Distribution. Provider errors are shown without a scripted fallback.':'Open Connectors to configure a model. No chat response can be generated without it.';$('mode-description').textContent=h.live_configured?'Live model ? Head of Distribution receives your message first.':'Model not configured. Open Connectors to start.';}
+function renderHealth(){const h=state.health;$('connection-status').textContent=t('Workspace connected');$('metric-sandbox').textContent=t(h.sandbox.available?'Ready':'Setup needed');$('model-status').textContent=t(h.live_configured?'Live model configured':'Connect a live model');$('model-description').textContent=h.live_configured?'Messages are sent to the live Head of Distribution. Provider errors are shown without a scripted fallback.':'Open Connectors to configure a model. No chat response can be generated without it.';$('mode-description').textContent=t(h.live_configured?'Live model · Head of Distribution receives your message first.':'Model not configured. Open Connectors to start.');}
 function renderChats(){
   const count=state.chats.filter(c=>['running','intake','needs_approval'].includes(c.status)).length;
-  $('metric-active').replaceChildren(document.createTextNode(String(count)+' '),element('small','', 'in progress'));
-  $('metric-runs').textContent=state.chats.length?`${state.chats.length} missions in this workspace`:'No missions started yet';
+  $('metric-active').replaceChildren(document.createTextNode(String(count)+' '),element('small','', t('in progress')));
+  $('metric-runs').textContent=state.chats.length?`${state.chats.length} missions in this workspace`:t('No missions started yet');
   if(state.chats.length){
     $('recent-missions').replaceChildren(...state.chats.slice(0,8).map(c=>action(c.id.slice(-6)+' · '+c.status,()=>selectChat(c.id),'')));
     $('mission-list').className='';$('mission-list').replaceChildren(...state.chats.slice(0,5).map(c=>{const button=action('',()=>selectChat(c.id),'mission-list-item');button.append(element('span','agent-avatar','↗'),element('strong','',c.id),pill(c.status));return button;}));
   }
-  const select=$('activity-mission');const old=select.value;select.replaceChildren(element('option','','Select a mission'));select.firstChild.value='';
+  const select=$('activity-mission');const old=select.value;select.replaceChildren(element('option','',t('Select a mission')));select.firstChild.value='';
   state.chats.filter(c=>c.run_id).forEach(c=>{const option=element('option','',`${c.id.slice(-6)} · ${c.mode} · ${c.status}`);option.value=c.run_id;select.append(option);});
   select.value=old||state.chat?.run_id||'';
 }
@@ -54,15 +55,15 @@ function searchOrganization(){const query=$('agent-search').value.trim().toLower
 async function selectChat(id){try{state.chat=await api('/api/chats/'+id);sessionStorage.setItem('collective-chat',id);state.chatSignature='';renderChat();navigate('chat');if(state.chat.run_id)$('activity-mission').value=state.chat.run_id;}catch(error){notice(error.message);}}
 function renderChat(){
   const chat=state.chat;const signature=JSON.stringify(chat);if(signature===state.chatSignature)return;state.chatSignature=signature;
-  const busy=!!chat&&['intake','running','clarifying','needs_input','needs_approval','paused','interrupted'].includes(chat.status);$('send-mission').disabled=busy;$('mission-input').placeholder=busy?'Your organization is working...':'Message your organization...';$('chat-status').textContent=chat?chat.status.replaceAll('_',' '):'Ready for a mission';
+  const busy=!!chat&&['intake','running','clarifying','needs_input','needs_approval','paused','interrupted'].includes(chat.status);$('send-mission').disabled=busy;$('mission-input').placeholder=t(busy?'Your organization is working...':'Message your organization...');$('chat-status').textContent=chat?chat.status.replaceAll('_',' '):t('Ready for a mission');
   const hint=chat?.progress?.label||'';$('chat-progress').classList.toggle('d-none',!hint);$('chat-progress-label').textContent=hint;
   const thread=$('chat-thread');const atBottom=thread.scrollHeight-thread.scrollTop-thread.clientHeight<70;
   const messages=$('chat-messages');
-  const transcriptSignature=JSON.stringify([chat?.id,chat?.transcript,chat?.error]);
+  const transcriptSignature=JSON.stringify([chat?.id,chat?.transcript,chat?.error,window.CollectivePreferences.get().language]);
   if(messages.dataset.signature!==transcriptSignature){
     messages.dataset.signature=transcriptSignature;
-  if(chat){messages.replaceChildren(...chat.transcript.map(message=>{const bubble=element('div','message '+message.role);bubble.append(element('span','message-label',message.role==='user'?'YOU':chat.run_id?'ORGANIZATION':'HEAD OF DISTRIBUTION'),document.createTextNode(message.content));return bubble;}));if(chat.error)messages.append(element('div','alert alert-danger',chat.error));
-  }else{const welcome=element('div','chat-welcome');welcome.append(element('span','welcome-glyph','✳'),element('h2','','What do you want to accomplish?'),element('p','','Start with the outcome. If something important is missing, we’ll ask before proceeding.'));messages.replaceChildren(welcome);}
+  if(chat){messages.replaceChildren(...chat.transcript.map(message=>{const bubble=element('div','message '+message.role);const content=element('div','message-content',message.content);content.dir='auto';bubble.append(element('span','message-label',message.role==='user'?'YOU':chat.run_id?'ORGANIZATION':'HEAD OF DISTRIBUTION'),content);return bubble;}));if(chat.error)messages.append(element('div','alert alert-danger',chat.error));
+  }else{const welcome=element('div','chat-welcome');const glyph=element('span','welcome-glyph','✳');glyph.setAttribute('aria-hidden','true');welcome.append(glyph,element('div','welcome-eyebrow',t('A little direction. A lot of possibility.')),element('h2','',t('What can we work on?')),element('p','',t('Describe an outcome, ask a question, or bring us your next idea.')));const prompts=element('div','welcome-prompts');for(const [key,label] of [['website','Build a website'],['calculator','Test JavaScript'],['research','Explore a decision']])prompts.append(action(t(label),()=>{$('mission-input').value=examples[key];state.pendingRequest=null;growComposer();$('mission-input').focus();}));welcome.append(prompts);messages.replaceChildren(welcome);}
   }
   const interventions=$('intervention-area');interventions.replaceChildren();
   if(chat?.status==='clarifying')interventions.append(questionForm(chat.questions));
@@ -148,8 +149,9 @@ $('view-evidence').addEventListener('click',()=>{$('activity-mission').value=sta
 for(const [id,actionName] of [['pause-mission','pause'],['resume-mission','resume']])$(id).addEventListener('click',async()=>{try{state.chat=await api('/api/chats/'+state.chat.id+'/control',{action:actionName});renderChat();if(actionName==='pause')$(id).textContent='Pause requested…';}catch(error){notice(error.message);}});
 window.addEventListener('popstate',()=>navigate(Object.keys(paths).find(k=>paths[k]===location.pathname)||'overview',false));
 let refreshing=false;
-async function refresh(){if(refreshing)return;refreshing=true;try{state.chats=await api('/api/chats');renderChats();if(state.chat){state.chat=await api('/api/chats/'+state.chat.id);renderChat();}if(state.view==='activity')await refreshActivity();$('connection-status').textContent='Workspace connected';}catch(error){$('connection-status').textContent='Connection interrupted';}finally{refreshing=false;}}
-(async()=>{try{state.token=(await (await fetch('/api/session')).json()).token;[state.roster,state.health]=await Promise.all([api('/api/organization'),api('/api/health')]);renderHealth();renderOrganization();await refresh();const saved=sessionStorage.getItem('collective-chat');if(saved&&state.chats.some(c=>c.id===saved)){state.chat=await api('/api/chats/'+saved);renderChat();}navigate(Object.keys(paths).find(k=>paths[k]===location.pathname)||'overview',false);setInterval(refresh,1500);document.documentElement.dataset.ready='true';}catch(error){notice('Could not connect to the local console: '+error.message);$('connection-status').textContent='Offline';}})();
+async function refresh(){if(refreshing)return;refreshing=true;try{state.chats=await api('/api/chats');renderChats();if(state.chat){state.chat=await api('/api/chats/'+state.chat.id);renderChat();}if(state.view==='activity')await refreshActivity();$('connection-status').textContent=t('Workspace connected');}catch(error){$('connection-status').textContent=t('Connection interrupted');}finally{refreshing=false;}}
+window.addEventListener('collective-preferences-change',()=>{if(!state.health)return;renderHealth();renderChats();if(!state.chat){state.chatSignature='';renderChat();}else $('mission-input').placeholder=t($('send-mission').disabled?'Your organization is working...':'Message your organization...');$('breadcrumb').textContent=t(labels[state.view]);growComposer();if(state.view==='connectors')renderConnectorCatalog();});
+(async()=>{try{state.token=(await (await fetch('/api/session')).json()).token;[state.roster,state.health]=await Promise.all([api('/api/organization'),api('/api/health')]);renderHealth();renderOrganization();await refresh();const saved=sessionStorage.getItem('collective-chat');if(saved&&state.chats.some(c=>c.id===saved))state.chat=await api('/api/chats/'+saved);renderChat();navigate(Object.keys(paths).find(k=>paths[k]===location.pathname)||'overview',false);setInterval(refresh,1500);document.documentElement.dataset.ready='true';}catch(error){notice('Could not connect to the local console: '+error.message);$('connection-status').textContent=t('Offline');}})();
 
 const connectorCatalog = [
   {id:'gmail',name:'Gmail',icon:'G',tone:'mail',description:'Email context, conversations and follow-ups.',soon:true},
@@ -171,12 +173,12 @@ function renderConnectorCatalog(){
     const icon=element('span','connector-icon '+c.tone,c.icon);icon.setAttribute('aria-hidden','true');
     const body=element('div','connector-card-copy');body.append(element('h2','',c.name),element('p','',c.description));
     const bottom=element('div','connector-card-footer');
-    if(c.soon){bottom.append(element('span','connector-badge coming-soon','Coming soon'));}
+    if(c.soon){bottom.append(element('span','connector-badge coming-soon',t('Coming soon')));}
     else {
       const saved=c.kind==='mcp'?null:savedConnectors.find(x=>x.kind===c.kind);
       const configured=c.kind==='meta'?state.health.live_configured:!!saved?.enabled;
-      bottom.append(element('span','connector-badge',configured?'Configured':'Available now'));
-      const button=action(saved?'Manage':'Set up',()=>{connectorOpener=button;editConnector(saved||{kind:c.kind,name:c.name,url:c.kind==='meta'?'https://api.meta.ai/v1':''});},'btn btn-outline-secondary btn-sm');
+      bottom.append(element('span','connector-badge',t(configured?'Configured':'Available now')));
+      const button=action(t(saved?'Manage':'Set up'),()=>{connectorOpener=button;editConnector(saved||{kind:c.kind,name:c.name,url:c.kind==='meta'?'https://api.meta.ai/v1':''});},'btn btn-outline-secondary btn-sm');
       button.setAttribute('aria-label',(saved?'Manage ':'Set up ')+c.name);bottom.append(button);
     }
     card.append(icon,body,bottom);return card;

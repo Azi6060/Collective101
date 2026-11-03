@@ -6,18 +6,90 @@ const base=process.env.COLLECTIVE101_TEST_URL;
 if(!base)throw new Error('Run npm.cmd run test:ui to use the isolated test service.');
 const html=await readFile(new URL('../collective101/web/index.html',import.meta.url),'utf8');
 const script=await readFile(new URL('../collective101/web/app.js',import.meta.url),'utf8');
+const preferencesScript=await readFile(new URL('../collective101/web/preferences.js',import.meta.url),'utf8');
+const localesScript=await readFile(new URL('../collective101/web/locales.js',import.meta.url),'utf8');
 async function waitFor(predicate,timeout=25000){const end=Date.now()+timeout;while(Date.now()<end){if(await predicate())return;await new Promise(resolve=>setTimeout(resolve,70));}throw new Error('Timed out waiting for UI state');}
-async function setup(transformChat=null){
+async function setup(transformChat=null,preferences={}){
   const errors=[];const virtualConsole=new VirtualConsole();virtualConsole.on('jsdomError',error=>errors.push(error.message));
   const dom=new JSDOM(html,{url:base,runScripts:'outside-only',virtualConsole});
   const win=dom.window;let poll=()=>{};
+  if(preferences.browserLanguage)Object.defineProperty(win.navigator,'language',{value:preferences.browserLanguage});
+  if(preferences.stored)win.localStorage.setItem('collective101.preferences.v1',JSON.stringify(preferences.stored));
+  if(preferences.blockStorage)Object.defineProperty(win,'localStorage',{get(){throw new Error('Storage disabled');}});
+  const mediaListeners=[];const media={matches:preferences.systemDark===true,addEventListener:(name,listener)=>mediaListeners.push(listener)};
+  win.matchMedia=()=>media;
   win.fetch=async(url,options={})=>{const target=new URL(url,base);assert.equal(target.origin,base);const response=await fetch(target,{...options,headers:{...options.headers,...(options.method==='POST'?{Origin:base}:{})}});if(transformChat&&target.pathname.startsWith('/api/chats/')){const chat=await response.clone().json();return new Response(JSON.stringify(transformChat(chat)),{status:response.status,headers:{'content-type':'application/json'}});}return response;};
   win.setInterval=fn=>{poll=fn;return 1;};win.HTMLElement.prototype.scrollIntoView=function(){};
-  win.eval(script);
+  win.eval(localesScript);win.eval(preferencesScript);win.eval(script);
   await waitFor(()=>win.document.documentElement.dataset.ready==='true');
-  return {dom,win,doc:win.document,poll:()=>poll(),errors};
+  return {dom,win,doc:win.document,poll:()=>poll(),errors,setSystemDark:dark=>{media.matches=dark;mediaListeners.forEach(listener=>listener());}};
 }
 function submit(win,form){form.dispatchEvent(new win.Event('submit',{bubbles:true,cancelable:true}));}
+
+test('popular interface languages have working settings translations and English is always the default',async()=>{
+  const app=await setup(null,{browserLanguage:'ar'});try{
+    const language=app.doc.getElementById('setting-language');
+    assert.equal(app.doc.documentElement.lang,'en');assert.equal(language.value,'en');
+    assert.equal(language.options[0].textContent,'English');
+    assert.deepEqual([...language.options].map(option=>option.value),['en','zh','es','hi','ar','fr','pt','ru','bn','de','ja','ko','id','ms']);
+    app.doc.querySelector('.nav-link[data-nav="settings"]').click();
+    app.doc.getElementById('mission-input').value='Keep this draft unchanged.';
+    for(const option of [...language.options]) {
+      language.value=option.value;language.dispatchEvent(new app.win.Event('change'));
+      assert.equal(app.doc.documentElement.lang,option.value);
+      assert.equal(app.doc.documentElement.dir,option.value==='ar'?'rtl':'ltr');
+      assert.equal(app.doc.getElementById('breadcrumb').textContent,app.win.CollectivePreferences.t('Settings'));
+      assert.equal(app.doc.querySelector('#view-settings h1').textContent,app.win.CollectivePreferences.t('Your workspace, your way.'));
+      if(option.value!=='en')assert.notEqual(app.doc.getElementById('breadcrumb').textContent,'Settings');
+      assert.equal(app.doc.getElementById('mission-input').value,'Keep this draft unchanged.');
+    }
+    app.doc.getElementById('reset-preferences').click();
+    assert.equal(app.doc.documentElement.lang,'en');assert.equal(app.doc.documentElement.dir,'ltr');
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
+
+test('settings preserve presentation preferences, follow system theme, and translate navigation',async()=>{
+  const app=await setup(null,{systemDark:true});try{
+    app.doc.querySelector('.nav-link[data-nav="settings"]').click();
+    assert.equal(app.win.location.pathname,'/settings');
+    assert.equal(app.doc.documentElement.dataset.theme,'dark');
+    app.setSystemDark(false);assert.equal(app.doc.documentElement.dataset.theme,'light');
+    app.doc.querySelector('[name="theme"][value="dark"]').click();
+    app.setSystemDark(false);assert.equal(app.doc.documentElement.dataset.theme,'dark');
+    const language=app.doc.getElementById('setting-language');language.value='ms';language.dispatchEvent(new app.win.Event('change'));
+    assert.equal(app.doc.documentElement.lang,'ms');
+    assert.equal(app.doc.getElementById('breadcrumb').textContent,'Tetapan');
+    assert.match(app.doc.querySelector('.nav-link[data-nav="chat"]').textContent,/Sembang misi/);
+    const size=app.doc.getElementById('setting-text-size');size.value='large';size.dispatchEvent(new app.win.Event('change'));
+    app.doc.getElementById('setting-reduce-motion').click();
+    const stored=app.win.CollectivePreferences.get();
+    const reloaded=await setup(null,{stored});try{
+      assert.equal(reloaded.doc.documentElement.dataset.theme,'dark');
+      assert.equal(reloaded.doc.documentElement.lang,'ms');
+      assert.equal(reloaded.doc.documentElement.dataset.textSize,'large');
+      assert.equal(reloaded.doc.documentElement.dataset.reduceMotion,'true');
+    }finally{reloaded.dom.window.close();}
+    app.doc.getElementById('reset-preferences').click();
+    assert.equal(app.doc.documentElement.lang,'en');assert.equal(app.doc.documentElement.dataset.textSize,'default');
+    assert.equal(app.doc.getElementById('breadcrumb').textContent,'Settings');
+    assert.equal(app.doc.getElementById('setting-reduce-motion').checked,false);
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
+
+test('invalid or unavailable preference storage cannot prevent chat startup',async()=>{
+  for(const preferences of [{stored:{theme:'bad',language:'xx',textSize:'huge',reduceMotion:'true'}},{blockStorage:true}]){
+    const app=await setup(null,preferences);try{
+      assert.equal(app.doc.documentElement.lang,'en');assert.equal(app.doc.documentElement.dataset.theme,'light');
+      assert.match(app.doc.getElementById('chat-messages').textContent,/What can we work on/);
+      app.doc.querySelector('[name="theme"][value="dark"]').click();
+      assert.equal(app.doc.documentElement.dataset.theme,'dark');
+      if(preferences.blockStorage)assert.match(app.doc.getElementById('preferences-status').textContent,/this visit only/);
+      assert.deepEqual(app.errors,[]);
+    }finally{app.dom.window.close();}
+  }
+});
 
 test('directory exposes departments, roles, reporting lines and per-agent activity',async()=>{
   const app=await setup();try{
@@ -39,6 +111,9 @@ test('short mission asks questions and answers continue to a recorded result',as
     const fields=app.doc.querySelectorAll('.intervention textarea');
     fields[0].value='For a local coffee shop serving residents who need to browse the menu and find the location.';
     fields[1].value='An accessible responsive page with opening hours, clear headings and operations documentation.';
+    app.doc.querySelector('[name="theme"][value="dark"]').click();
+    assert.equal(app.doc.querySelector('.intervention textarea'),fields[0],'Changing presentation must preserve the guidance form');
+    assert.match(fields[0].value,/local coffee shop/);
     submit(app.win,app.doc.querySelector('form.intervention'));
     await waitFor(async()=>{await app.poll();return app.doc.getElementById('chat-status').textContent==='reviewed';});
     assert.match(app.doc.getElementById('brief-content').textContent,/SUCCESS CRITERIA/);

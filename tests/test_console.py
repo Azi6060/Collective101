@@ -170,6 +170,10 @@ class ConsoleTest(unittest.TestCase):
             with urllib.request.urlopen(req,timeout=3) as response:return json.load(response)
         try:
             token=request('/api/session')['token']
+            for route, marker in [('/settings', b'id="view-settings"'),('/preferences.js',b'CollectivePreferences'),('/locales.js',b'CollectiveLocales'),('/workspace.css',b'--surface')]:
+                with urllib.request.urlopen(base+route,timeout=3) as response:
+                    self.assertEqual(response.status,200)
+                    self.assertIn(marker,response.read())
             with self.assertRaises(urllib.error.HTTPError):request('/api/organization')
             self.assertEqual(len(request('/api/organization',headers={'X-Console-Token':token})['agents']),101)
             headers={'X-Console-Token':token,'Content-Type':'application/json','Origin':'https://evil.example'}

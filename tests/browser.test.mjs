@@ -2,6 +2,8 @@
 import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {connectBrowser,inspect,waitUntil,waitReady,resultText} from '../scripts/playwright-mcp-client.mjs';
+import {auditTextContrast} from './contrast-audit.mjs';
+import {writeFile} from 'node:fs/promises';
 const base=process.env.COLLECTIVE101_TEST_URL;
 assert.ok(base&&process.env.COLLECTIVE101_ISOLATED_TEST==='1','Run npm run test:browser with the isolated Python service');
 assert.notEqual(new URL(base).port,'8765','Never run interaction tests on the user app');
@@ -24,14 +26,14 @@ test('desktop and mobile composer stays visible, grows, caps and shrinks',async(
   await browser.call('browser_resize',{width:390,height:844});
   try {
     await shot('mobile');
-    const layout=await inspect(browser,()=>({width:document.documentElement.scrollWidth,viewport:innerWidth,bottom:document.querySelector('#mission-form').getBoundingClientRect().bottom,height:innerHeight}));
+    const layout=await inspect(browser,()=>({width:document.documentElement.scrollWidth,viewport:innerWidth,bottom:document.querySelector('#mission-form').getBoundingClientRect().bottom,height:innerHeight,thread:document.querySelector('#chat-thread').clientHeight}));
     assert.ok(layout.width<=layout.viewport,'No horizontal overflow');
     assert.ok(layout.bottom<=layout.height,`Composer bottom ${layout.bottom} exceeds viewport ${layout.height}`);
   }finally{await browser.call('browser_resize',{width:1440,height:1000});}
 });
 
 test('all views fit narrow mobile, tablet, laptop and desktop viewports',async()=>{
-  const pages=['overview','organization','chat','connectors','activity'];
+  const pages=['overview','organization','chat','connectors','activity','settings'];
   const viewports=[[320,568],[360,640],[390,844],[768,1024],[1024,768],[1280,720],[1440,1000]];
   try{
     for(const name of pages){
@@ -54,7 +56,7 @@ test('all views fit narrow mobile, tablet, laptop and desktop viewports',async()
 });
 
 test('visible views expose named controls, form labels and page headings',async()=>{
-  for(const name of ['overview','organization','chat','connectors','activity']){
+  for(const name of ['overview','organization','chat','connectors','activity','settings']){
     await click(`.nav-link[data-nav="${name}"]`);
     const audit=await inspect(browser,()=>{
       const visible=element=>!!(element.offsetWidth||element.offsetHeight||element.getClientRects().length);
@@ -138,7 +140,7 @@ test('organization and connector catalog support search, roles and keyboard dism
   assert.equal(await inspect(browser,()=>document.querySelectorAll('.department-card').length),10);
   await type('#agent-search','research-003');await click('#search-results button');
   assert.match(await inspect(browser,()=>document.querySelector('#agent-inspector').textContent),/web_search/);
-  await click('[data-nav="connectors"]');
+  await click('.nav-link[data-nav="connectors"]');
   await waitUntil(browser,()=>document.querySelectorAll('.connector-card').length===9,'connector cards');
   await type('#connector-search','github');
   assert.equal(await inspect(browser,()=>document.querySelectorAll('.connector-card').length),1);
@@ -148,6 +150,91 @@ test('organization and connector catalog support search, roles and keyboard dism
   await browser.call('browser_press_key',{key:'Escape'});
   assert.equal(await inspect(browser,()=>document.activeElement.getAttribute('aria-label')),'Set up Custom MCP');
   await shot('connectors');
+  const errors=resultText(await browser.call('browser_console_messages',{level:'warning',all:true}));
+  assert.match(errors,/Errors: 0, Warnings: 0/);
+});
+
+test('settings work by keyboard, persist after reload, and fit mobile with larger Malay text',async()=>{
+  await click('.nav-link[data-nav="settings"]');
+  await click('.theme-option:has(input[value="light"])');
+  await browser.call('browser_press_key',{key:'ArrowRight'});
+  assert.equal(await inspect(browser,()=>document.documentElement.dataset.theme),'dark');
+  await browser.call('browser_press_key',{key:'Tab'});
+  const focus=await inspect(browser,()=>({id:document.activeElement.id,outline:getComputedStyle(document.activeElement).outlineWidth}));
+  assert.equal(focus.id,'setting-language');assert.ok(parseFloat(focus.outline)>=2,'Keyboard focus must be visible');
+  await shot('settings-dark');
+  await browser.call('browser_select_option',{target:'#setting-language',values:['ms']});
+  await browser.call('browser_select_option',{target:'#setting-text-size',values:['large']});
+  await click('#setting-reduce-motion');
+  await browser.call('browser_navigate',{url:base+'/settings'});await waitReady(browser);
+  const preferences=await inspect(browser,()=>({theme:document.documentElement.dataset.theme,language:document.documentElement.lang,size:document.documentElement.dataset.textSize,motion:document.documentElement.dataset.reduceMotion,heading:document.querySelector('#view-settings h1').textContent,animation:getComputedStyle(document.querySelector('.activity-dot')).animationName}));
+  assert.deepEqual(preferences,{theme:'dark',language:'ms',size:'large',motion:'true',heading:'Ruang kerja anda, cara anda.',animation:'none'});
+  try {
+    await browser.call('browser_resize',{width:320,height:568});
+    assert.ok(await inspect(browser,()=>document.documentElement.scrollWidth<=innerWidth));
+    await shot('settings-mobile');
+    await click('.nav-link[data-nav="chat"]');
+    const layout=await inspect(browser,()=>({width:document.documentElement.scrollWidth,viewport:innerWidth,bottom:document.querySelector('#mission-form').getBoundingClientRect().bottom,height:innerHeight,thread:document.querySelector('#chat-thread').clientHeight}));
+    await shot('chat-mobile-large');
+    assert.ok(layout.width<=layout.viewport&&layout.bottom<=layout.height,`Large-text mobile chat must fit: ${JSON.stringify(layout)}`);
+    assert.ok(layout.thread>=64,`Conversation needs readable space: ${JSON.stringify(layout)}`);
+  }finally {
+    await browser.call('browser_resize',{width:1440,height:1000});
+    await click('.nav-link[data-nav="settings"]');await click('#reset-preferences');
+  }
+  assert.equal(await inspect(browser,()=>document.documentElement.lang),'en');
+});
+
+test('popular languages translate settings, preserve English default, and support Arabic layouts',async()=>{
+  await browser.call('browser_navigate',{url:base+'/settings'});await waitReady(browser);
+  const initial=await inspect(browser,()=>({language:document.documentElement.lang,first:document.querySelector('#setting-language option').value,codes:[...document.querySelector('#setting-language').options].map(option=>option.value)}));
+  assert.equal(initial.language,'en');assert.equal(initial.first,'en');assert.equal(initial.codes.length,14);
+  const labels={en:'Settings',zh:'设置',es:'Configuración',hi:'सेटिंग्स',ar:'الإعدادات',fr:'Paramètres',pt:'Configurações',ru:'Настройки',bn:'সেটিংস',de:'Einstellungen',ja:'設定',ko:'설정',id:'Pengaturan',ms:'Tetapan'};
+  try{
+    for(const code of initial.codes){
+      await browser.call('browser_select_option',{target:'#setting-language',values:[code]});
+      const state=await inspect(browser,()=>({language:document.documentElement.lang,dir:document.documentElement.dir,label:document.querySelector('#breadcrumb').textContent}));
+      assert.deepEqual(state,{language:code,dir:code==='ar'?'rtl':'ltr',label:labels[code]});
+      await browser.call('browser_resize',{width:320,height:568});
+      assert.ok(await inspect(browser,()=>document.documentElement.scrollWidth<=innerWidth),code+' settings must fit mobile');
+      await browser.call('browser_resize',{width:1440,height:1000});
+    }
+    await browser.call('browser_select_option',{target:'#setting-language',values:['ar']});
+    await browser.call('browser_navigate',{url:base+'/settings'});await waitReady(browser);
+    assert.equal(await inspect(browser,()=>document.documentElement.lang),'ar');
+    await shot('settings-arabic');
+    for(const view of ['overview','organization','chat','connectors','activity','settings']){
+      await click(`.nav-link[data-nav="${view}"]`);
+      for(const [width,height] of [[1440,1000],[390,844]]){
+        await browser.call('browser_resize',{width,height});
+        const layout=await inspect(browser,()=>({width:document.documentElement.scrollWidth,viewport:innerWidth,bottom:document.querySelector('#mission-form').getBoundingClientRect().bottom,height:innerHeight}));
+        assert.ok(layout.width<=layout.viewport,view+' Arabic view must fit');
+        if(view==='chat')assert.ok(layout.bottom<=layout.height);
+      }
+    }
+    await shot('settings-arabic-mobile');
+  }finally{
+    await browser.call('browser_resize',{width:1440,height:1000});
+    await click('.nav-link[data-nav="settings"]');await click('#reset-preferences');
+  }
+  assert.equal(await inspect(browser,()=>document.documentElement.lang),'en');
+});
+
+test('visible interface text meets contrast targets in light and dark views',async()=>{
+  const evidence=[];
+  for(const theme of ['light','dark']) {
+    await click('.nav-link[data-nav="settings"]');await click(`.theme-option:has(input[value="${theme}"])`);
+    for(const view of ['overview','organization','chat','connectors','activity','settings']) {
+      await click(`.nav-link[data-nav="${view}"]`);
+      if(view==='connectors')await waitUntil(browser,()=>document.querySelectorAll('.connector-card').length===9);
+      const audit=await inspect(browser,auditTextContrast);evidence.push({theme,view,...audit});
+      if(view==='overview'||view==='chat'||view==='settings')await shot(`${view}-${theme}`);
+    }
+  }
+  await writeFile(new URL('../work/playwright/contrast-audit.json',import.meta.url),JSON.stringify(evidence,null,2));
+  assert.deepEqual(evidence.flatMap(result=>result.failures.map(failure=>({theme:result.theme,view:result.view,...failure}))),[]);
+  assert.ok(evidence.every(result=>result.checked>10),'Each view must include actual visible text');
+  await click('.theme-option:has(input[value="light"])');
   const errors=resultText(await browser.call('browser_console_messages',{level:'warning',all:true}));
   assert.match(errors,/Errors: 0, Warnings: 0/);
 });

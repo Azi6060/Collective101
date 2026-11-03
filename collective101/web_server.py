@@ -59,8 +59,8 @@ def make_server(state,port=8765,console=None):
                     else: return self.send(404,{'error':'Not found'})
                     return self.send(200,result)
                 except ValueError as error: return self.send(404,{'error':str(error)})
-            files={'/':'index.html','/chat':'index.html','/organization':'index.html','/activity':'index.html','/connectors':'index.html',
-                   '/app.css':'app.css','/app.js':'app.js','/vendor/bootstrap.min.css':'vendor/bootstrap.min.css'}
+            files={'/':'index.html','/chat':'index.html','/organization':'index.html','/activity':'index.html','/connectors':'index.html','/settings':'index.html',
+                   '/app.css':'app.css','/workspace.css':'workspace.css','/locales.js':'locales.js','/preferences.js':'preferences.js','/app.js':'app.js','/vendor/bootstrap.min.css':'vendor/bootstrap.min.css'}
             if path not in files: return self.send(404,{'error':'Not found'})
             target=WEB/files[path]
             if not target.is_file(): return self.send(404,{'error':'Asset unavailable'})

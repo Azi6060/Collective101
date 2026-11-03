@@ -18,7 +18,9 @@ def main():
         server=make_server(state,0,service);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         try:
             test_file='tests/browser.test.mjs' if browser_mode else 'tests/ui.test.mjs'
-            result=subprocess.run(['node','--test',test_file],cwd=ROOT,
+            # Forward Node test-runner switches for focused, still-isolated checks.
+            test_options=[arg for arg in sys.argv[1:] if arg!='--browser']
+            result=subprocess.run(['node','--test',*test_options,test_file],cwd=ROOT,
                 env={**os.environ,'COLLECTIVE101_TEST_URL':f'http://127.0.0.1:{server.server_port}',
                      'COLLECTIVE101_ISOLATED_TEST':'1'},capture_output=True,text=True,encoding='utf-8',timeout=240 if browser_mode else 120)
             output=result.stdout+result.stderr
