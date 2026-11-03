@@ -12,6 +12,7 @@ from collective101.department_fixture import DepartmentFixtureProvider
 from collective101.provider import Completion
 from collective101.sandbox import execute_javascript
 from collective101.web_server import make_server
+from collective101 import learning
 from chat_test_provider import ChatTestProvider
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -69,6 +70,9 @@ class ConsoleTest(unittest.TestCase):
             self.assertEqual(len(evidence['checks']),3)
             request=org.store.query("SELECT input FROM org_calls WHERE run_id=? AND phase='review'",(run['id'],))[0]
             self.assertIn('execution_evidence',json.loads(json.loads(request['input'])[1]['content']))
+            outcome=org.store.query('SELECT evidence_mode,live,accepted,evidence_run FROM org_team_outcomes WHERE root_id=?',(run['id'],))[0]
+            self.assertEqual((outcome['evidence_mode'],outcome['live'],outcome['accepted'],outcome['evidence_run']),
+                ('fixture',0,1,run['id']))
         finally:org.close()
     def test_failed_execution_overrides_model_acceptance(self):
         mission=json.loads((ROOT/'examples/javascript-mission.json').read_text())
@@ -79,7 +83,57 @@ class ConsoleTest(unittest.TestCase):
             self.assertEqual(run['status'],'blocked')
             self.assertTrue(run['result']['review']['accepted'])
             self.assertIn('Execution failed',run['result']['check_errors'][0])
+            outcome=org.store.query('SELECT evidence_mode,live,accepted FROM org_team_outcomes WHERE root_id=?',(run['id'],))[0]
+            self.assertEqual((outcome['evidence_mode'],outcome['live'],outcome['accepted']),('fixture',0,0))
         finally:org.close()
+
+    def test_similar_live_team_outcomes_are_advisory_and_fixture_history_is_excluded(self):
+        class Provider:
+            name='meta'
+            model='test-model'
+            url='https://model.example.test/v1'
+
+        class FixtureProvider:
+            name='fixture'
+
+        console=self.console
+        class EvidenceRecorder:
+            def __init__(self,provider):
+                self.store=console.store
+                self.provider=provider
+                self.provider_signature=learning.provider_signature(provider)
+            def inspect(self,root):
+                return {'mission':{'objective':'Create an accessible onboarding website for new remote workers with clear guidance.'}}
+
+        live=Provider()
+        for root,accepted,departments in (
+            ('live-blocked',False,['engineering','design']),
+            ('live-accepted',True,['research','communications']),
+        ):
+            recorder=EvidenceRecorder(live)
+            learning.record_team_outcome(recorder,root,root,{'accepted':accepted,'selected_departments':departments})
+        fixture=EvidenceRecorder(FixtureProvider())
+        learning.record_team_outcome(fixture,'fixture-outcome','fixture-outcome',
+            {'accepted':False,'selected_departments':['engineering','design']})
+
+        transcript=[{'role':'user','content':'Build an accessible onboarding website for new remote workers with clear guidance.'}]
+        matches=learning.team_recommendations(self.console.store,live,learning.transcript_query(transcript))
+        self.assertEqual({item['outcome'] for item in matches},{'accepted','not_accepted'})
+        self.assertTrue(all(item['matched_objective_terms']>=2 for item in matches))
+        self.assertNotIn('fixture-outcome',{item['evidence_run'] for item in matches})
+
+        messages,_=self.console.intake_messages(transcript,matches)
+        prompt=messages[0]['content']
+        self.assertIn('Prefer a different smallest-useful team after a prior team was not accepted',prompt)
+        self.assertIn('do not prove which department caused success or failure',prompt)
+        self.assertIn('Do not exclude any department automatically',prompt)
+        self.assertIn('live-blocked',prompt)
+        self.assertEqual(learning.team_recommendations(self.console.store,FixtureProvider(),
+            learning.transcript_query(transcript)),[])
+        different_model=Provider()
+        different_model.model='other-model'
+        self.assertEqual(learning.team_recommendations(self.console.store,different_model,
+            learning.transcript_query(transcript)),[])
     def test_agent_intervention_preserves_work_and_resumes(self):
         class QuestionProvider(ChatTestProvider):
             def complete(self,messages,tools=None):

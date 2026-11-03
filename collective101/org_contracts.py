@@ -218,6 +218,39 @@ def report(value, artifact_ids, pending_departments=(), support_available=True):
     return value
 
 
+def plan_change_request(value, pending_departments, selected_departments, proposals,
+                        mission, roster, permitted_tools):
+    fields={"kind","department","reason","task"}
+    if not isinstance(value,dict) or set(value)!=fields or value.get("kind")!="add_task":
+        raise ValueError("Only one bounded add_task request is supported")
+    department=value.get("department")
+    if department not in selected_departments or department not in pending_departments:
+        raise ValueError("A task can be proposed only for a selected department that has not started")
+    reason=text(value.get("reason"),"plan change reason",1000)
+    original=proposals.get(department)
+    if not original or original.get("decision")!="contribute":
+        raise ValueError("The target department must already have an approved contribution proposal")
+    if not isinstance(value.get("task"),dict):
+        raise ValueError("A plan change must include exactly one task")
+    task=value["task"]
+    task_fields={"key","title","instructions","assignee","depends_on","requires","tools","outputs"}
+    if set(task)!=task_fields:
+        raise ValueError("A proposed task must use the complete task contract")
+    required=set(strings(task.get("requires"),"required capabilities",8))
+    optional=set(strings(task.get("tools"),"optional tools",5))
+    allowed=set(mission["allowed_capabilities"])
+    if required-allowed or optional-allowed:
+        raise ValueError("A proposed task cannot expand mission capabilities")
+    available=set(permitted_tools)
+    if (required-{"draft_artifact"})-available or optional-available:
+        raise ValueError("A proposed task cannot expand the assignee's available tools")
+    candidate={**original,"tasks":[*original["tasks"],task]}
+    if len(candidate["tasks"])>6:
+        raise ValueError("A department may assign at most six tasks per round")
+    proposal(candidate,department,roster)
+    return {"kind":"add_task","department":department,"reason":reason,"task":task}
+
+
 def support_response(value, original_proposal):
     if not isinstance(value,dict) or set(value)!={'decision','reason','task_key','passive_insight'}:
         raise ValueError("Support response must contain only the bounded decision fields")

@@ -98,6 +98,7 @@ def make_server(state,port=8765,console=None):
                     if action=='answers': result=service.answer(cid,payload.get('answers'),payload.get('intervention_id'))
                     elif action=='messages': result=service.message(cid,payload.get('message'))
                     elif action=='control': result=service.control(cid,payload.get('action'))
+                    elif action=='plan-change': result=service.decide_plan_change(cid,payload.get('change_id'),payload.get('decision'))
                     else: return self.send(404,{'error':'Not found'})
                 return self.send(200,result)
             except (ValueError,KeyError,TypeError) as error:

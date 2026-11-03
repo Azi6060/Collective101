@@ -112,6 +112,27 @@ test('provider clarification can be answered and leads to reviewed mission evide
   await waitUntil(browser,()=>document.querySelectorAll('#activity-content details').length>0,'recorded evidence');
 });
 
+test('new work pauses for approval and declining preserves the original plan',async()=>{
+  await newChat();await type('#mission-input','plan-change-check: Compare the proposed approaches and prepare a research brief with a concise decision summary for stakeholders.');
+  await click('#send-mission');
+  await waitUntil(browser,()=>document.querySelector('#chat-status').textContent==='needs approval','plan-change approval');
+  const proposal=await inspect(browser,()=>document.querySelector('#intervention-area').textContent);
+  assert.match(proposal,/No changed work has started/);
+  assert.match(proposal,/Assess the accessibility finding/);
+  assert.match(proposal,/Decline and continue/);
+  await click('#intervention-area button:has-text("Decline and continue")');
+  await waitUntil(browser,()=>document.querySelector('#chat-status').textContent==='reviewed','original plan after decline');
+  assert.match(await inspect(browser,()=>document.querySelector('#brief-content').textContent),/Plan change declined/);
+
+  await newChat();await type('#mission-input','plan-change-check: Compare the proposed approaches and prepare a research brief with a concise decision summary for stakeholders.');
+  await click('#send-mission');
+  await waitUntil(browser,()=>document.querySelector('#chat-status').textContent==='needs approval','second plan-change approval');
+  await click('#intervention-area button:has-text("Approve task")');
+  await waitUntil(browser,()=>document.querySelector('#chat-status').textContent==='reviewed','approved task review',60000);
+  const result=await inspect(browser,()=>document.querySelector('#brief-content').textContent);
+  assert.match(result,/Plan change approved: Assess the accessibility finding/);
+});
+
 test('organization and connector catalog support search, roles and keyboard dismissal',async()=>{
   await click('[data-nav="organization"]');
   assert.equal(await inspect(browser,()=>document.querySelectorAll('.department-card').length),10);

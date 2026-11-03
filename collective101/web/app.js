@@ -16,7 +16,7 @@ function newMission(){state.chat=null;state.chatSignature='';state.pendingReques
 function prettyAgent(id){return state.roster?.agents.find(agent=>agent.id===id)?.name||id;}
 function renderHealth(){const h=state.health;$('connection-status').textContent='Workspace connected ? '+(h.version||'older server');$('metric-sandbox').textContent=h.sandbox.available?'Ready':'Setup needed';$('model-status').textContent=h.live_configured?'Live model configured':'Connect a live model';$('model-description').textContent=h.live_configured?'Messages are sent to the live Head of Distribution. Provider errors are shown without a scripted fallback.':'Open Connectors to configure a model. No chat response can be generated without it.';$('mode-description').textContent=h.live_configured?'Live model ? Head of Distribution receives your message first.':'Model not configured. Open Connectors to start.';}
 function renderChats(){
-  const count=state.chats.filter(c=>['running','intake'].includes(c.status)).length;
+  const count=state.chats.filter(c=>['running','intake','needs_approval'].includes(c.status)).length;
   $('metric-active').replaceChildren(document.createTextNode(String(count)+' '),element('small','', 'in progress'));
   $('metric-runs').textContent=state.chats.length?`${state.chats.length} missions in this workspace`:'No missions started yet';
   if(state.chats.length){
@@ -54,7 +54,7 @@ function searchOrganization(){const query=$('agent-search').value.trim().toLower
 async function selectChat(id){try{state.chat=await api('/api/chats/'+id);sessionStorage.setItem('collective-chat',id);state.chatSignature='';renderChat();navigate('chat');if(state.chat.run_id)$('activity-mission').value=state.chat.run_id;}catch(error){notice(error.message);}}
 function renderChat(){
   const chat=state.chat;const signature=JSON.stringify(chat);if(signature===state.chatSignature)return;state.chatSignature=signature;
-  const busy=!!chat&&['intake','running','clarifying','needs_input','paused','interrupted'].includes(chat.status);$('send-mission').disabled=busy;$('mission-input').placeholder=busy?'Your organization is working...':'Message your organization...';$('chat-status').textContent=chat?chat.status.replaceAll('_',' '):'Ready for a mission';
+  const busy=!!chat&&['intake','running','clarifying','needs_input','needs_approval','paused','interrupted'].includes(chat.status);$('send-mission').disabled=busy;$('mission-input').placeholder=busy?'Your organization is working...':'Message your organization...';$('chat-status').textContent=chat?chat.status.replaceAll('_',' '):'Ready for a mission';
   const hint=chat?.progress?.label||'';$('chat-progress').classList.toggle('d-none',!hint);$('chat-progress-label').textContent=hint;
   const thread=$('chat-thread');const atBottom=thread.scrollHeight-thread.scrollTop-thread.clientHeight<70;
   const messages=$('chat-messages');
@@ -67,12 +67,16 @@ function renderChat(){
   const interventions=$('intervention-area');interventions.replaceChildren();
   if(chat?.status==='clarifying')interventions.append(questionForm(chat.questions));
   if(chat?.status==='needs_input')chat.interventions.filter(q=>q.status==='pending').forEach(q=>interventions.append(questionForm([q.question],q)));
+  if(chat?.status==='needs_approval'&&chat.run?.plan_change_request?.status==='pending')interventions.append(planChangeCard(chat.run.plan_change_request));
   $('brief-title').textContent=chat?.brief?'The agreed outcome':'Intent comes first.';
   const brief=$('brief-content');brief.replaceChildren();
   if(chat?.brief){brief.append(element('p','',chat.brief.objective));const criteria=element('ul');chat.brief.acceptance_criteria.forEach(c=>criteria.append(element('li','',c)));brief.append(element('strong','mini-label','SUCCESS CRITERIA'),criteria,element('p','text-secondary',`Mode: ${chat.mode==='fixture'?'Demo — scripted model responses':'Live Meta inference'}`));if(chat.run)brief.append(element('p','text-secondary',`${chat.run.calls} / ${chat.run.max_calls} model requests · ${chat.run.tokens} reported tokens`));}
   else brief.append(element('p','text-secondary','Your agreed objective and success criteria will appear here.'));
   if(chat?.brief)brief.append(element('p','',`Initially routed departments: ${chat.brief.departments?.join(', ')||'all (legacy mission)'}`));
+  if(chat?.brief?.team_learning?.length){brief.append(element('strong','mini-label','SIMILAR MISSION HISTORY'),element('p','text-secondary','Advisory team-level evidence only; it does not identify which department caused an outcome.'));const history=element('ul');chat.brief.team_learning.forEach(item=>history.append(element('li','',`${item.outcome==='accepted'?'Accepted':'Not accepted'} · ${item.departments.join(', ')} · evidence run ${item.evidence_run}`)));brief.append(history);}
   if(chat?.run?.result)brief.append(element('p','',`Working departments: ${chat.run.result.selected_departments.join(', ')}`));
+  if(chat?.run?.result?.assignment_evidence){const result=chat.run.result,evidence=result.assignment_evidence;brief.append(element('strong','mini-label','CHECKED TASK EXPERIENCE SHARED WITH HEADS'),element('p','text-secondary','Positive, independently checked similar-task history only. This is advisory evidence, not a rating or automatic assignment.'));if(evidence.length){const history=element('ul');evidence.forEach(item=>{const selected=result.selected_departments.includes(item.department);const assigned=selected?result.proposals?.[item.department]?.tasks?.find(task=>task.assignee===item.agent_id):null;const strength=item.history_strength==='repeated'?'repeated history':'limited history';const disposition=assigned?`proposed for "${assigned.title}"`:selected?'not assigned to a task': 'department not selected';history.append(element('li','',`${item.agent_id} (${item.department}): ${item.similar_verified_tasks} similar checked task(s) across ${item.verified_missions} mission(s), ${strength}; evidence ${item.evidence_runs.join(', ')}; ${disposition}`));});brief.append(history);}else brief.append(element('p','text-secondary','No relevant checked task history was available; this means unknown, not poor performance.'));}
+  (chat?.run?.result?.plan_changes||[]).forEach(change=>brief.append(element('p','plan-change-outcome',`Plan change ${change.status}: ${change.proposal?.task?.title||change.reason}`)));
   if(chat?.budget)brief.append(element('p','text-secondary',`${chat.budget.calls} / ${chat.budget.max_calls} total provider requests ? ${chat.budget.charged_tokens} / ${chat.budget.max_tokens} token admission units ? ${chat.budget.reported_tokens} reported tokens (intake included)`));
   if(atBottom)thread.scrollTop=thread.scrollHeight;
   $('mission-controls').classList.toggle('d-none',!chat?.run_id);$('pause-mission').classList.toggle('d-none',chat?.status!=='running');$('resume-mission').classList.toggle('d-none',!['paused','interrupted'].includes(chat?.status));
@@ -85,6 +89,30 @@ function questionForm(questions,intervention=null){
   if(!intervention && state.chat?.intake?.output?.reason)form.append(element('p','text-secondary',state.chat.intake.output.reason));
   const button=element('button','btn btn-primary','Answer & continue →');button.type='submit';form.append(button);
   form.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;try{const answers=fields.map(f=>f.value.trim());state.chat=await api('/api/chats/'+state.chat.id+'/answers',{answers:intervention?answers[0]:answers,intervention_id:intervention?.id});renderChat();notice('');}catch(error){notice(error.message);button.disabled=false;}});return form;
+}
+function planChangeCard(change){
+  const panel=element('section','intervention plan-change');panel.setAttribute('aria-labelledby','plan-change-title');panel.setAttribute('aria-live','polite');
+  panel.append(element('h3','','A department proposed a plan change'),element('p','',`${prettyAgent(change.requested_by+'-001')} proposes one task for ${change.department}. No changed work has started.`));
+  panel.append(element('p','',change.reason),element('h4','',change.task.title),
+    element('p','',`Assigned to ${prettyAgent(change.task.assignee)} · ${change.task.assignee}`),
+    element('p','',change.task.instructions),
+    element('p','',`Depends on: ${change.task.depends_on.join(', ')||'none'}`),
+    element('p','',`Required capabilities: ${change.task.requires.join(', ')}`),
+    element('p','',`Optional tools: ${change.task.tools.join(', ')||'none'}`),
+    element('p','',`New output: ${change.task.outputs.join(', ')}`),
+    element('p','text-secondary','Approval adds only this task to an already selected department. Mission criteria, existing assignments, permissions and budgets stay unchanged. Declining continues the original plan.'));
+  const controls=element('div','d-flex gap-2');
+  const approve=element('button','btn btn-primary','Approve task');approve.type='button';
+  approve.addEventListener('click',()=>resolvePlanChange(change,'approve',approve,decline));
+  const decline=action('Decline and continue',()=>resolvePlanChange(change,'decline',approve,decline));
+  controls.append(approve,decline);panel.append(controls);return panel;
+}
+async function resolvePlanChange(change,decision,...buttons){
+  buttons.forEach(button=>button.disabled=true);
+  try{
+    state.chat=await api('/api/chats/'+state.chat.id+'/plan-change',{change_id:change.id,decision});
+    renderChat();notice('');await refresh();
+  }catch(error){notice(error.message);buttons.forEach(button=>button.disabled=false);}
 }
 async function refreshActivity(){
   const id=$('activity-mission').value;if(!id)return;

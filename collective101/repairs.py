@@ -143,6 +143,8 @@ def run_with_repairs(org,root):
     final=org.inspect(root)
     if final['status']=='reviewed':org._remember(current['id'],current['result'])
     if final['status'] in {'reviewed','blocked'} and current.get('result'):
-        from .learning import record_contributions
+        from .learning import record_contributions,record_task_evidence,record_team_outcome
         record_contributions(org,root,current['id'],current['result'])
+        record_task_evidence(org,root,current['id'],current['result'])
+        record_team_outcome(org,root,current['id'],current['result'])
     return final

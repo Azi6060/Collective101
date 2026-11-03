@@ -7,11 +7,11 @@ if(!base)throw new Error('Run npm.cmd run test:ui to use the isolated test servi
 const html=await readFile(new URL('../collective101/web/index.html',import.meta.url),'utf8');
 const script=await readFile(new URL('../collective101/web/app.js',import.meta.url),'utf8');
 async function waitFor(predicate,timeout=25000){const end=Date.now()+timeout;while(Date.now()<end){if(await predicate())return;await new Promise(resolve=>setTimeout(resolve,70));}throw new Error('Timed out waiting for UI state');}
-async function setup(){
+async function setup(transformChat=null){
   const errors=[];const virtualConsole=new VirtualConsole();virtualConsole.on('jsdomError',error=>errors.push(error.message));
   const dom=new JSDOM(html,{url:base,runScripts:'outside-only',virtualConsole});
   const win=dom.window;let poll=()=>{};
-  win.fetch=(url,options={})=>{const target=new URL(url,base);assert.equal(target.origin,base);return fetch(target,{...options,headers:{...options.headers,...(options.method==='POST'?{Origin:base}:{})}});};
+  win.fetch=async(url,options={})=>{const target=new URL(url,base);assert.equal(target.origin,base);const response=await fetch(target,{...options,headers:{...options.headers,...(options.method==='POST'?{Origin:base}:{})}});if(transformChat&&target.pathname.startsWith('/api/chats/')){const chat=await response.clone().json();return new Response(JSON.stringify(transformChat(chat)),{status:response.status,headers:{'content-type':'application/json'}});}return response;};
   win.setInterval=fn=>{poll=fn;return 1;};win.HTMLElement.prototype.scrollIntoView=function(){};
   win.eval(script);
   await waitFor(()=>win.document.documentElement.dataset.ready==='true');
@@ -45,6 +45,32 @@ test('short mission asks questions and answers continue to a recorded result',as
     app.doc.getElementById('view-evidence').click();
     await waitFor(()=>app.doc.querySelectorAll('#activity-content details').length>0);
     assert.match(app.doc.getElementById('activity-mode').textContent,/Live Meta/);
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
+test('mission brief displays prior team and employee evidence with provenance and advisory scope',async()=>{
+  const app=await setup(chat=>chat.brief?{...chat,brief:{...chat.brief,team_learning:[
+    {outcome:'not_accepted',departments:['engineering','design'],evidence_run:'org_prior_blocked'},
+    {outcome:'accepted',departments:['research','communications'],evidence_run:'org_prior_accepted'}
+  ]},run:chat.run?{...chat.run,result:{...chat.run.result,
+    selected_departments:[...new Set([...chat.run.result.selected_departments,'engineering'])],
+    assignment_evidence:[{department:'engineering',agent_id:'engineering-003',similar_verified_tasks:2,
+      verified_missions:2,history_strength:'repeated',evidence_runs:['org_task_one','org_task_two']}],
+    proposals:{...chat.run.result.proposals,engineering:{tasks:[
+      {key:'calculator',title:'Implement calculator addition',assignee:'engineering-003'}
+    ]}}
+  }}:chat.run}:chat);try{
+    app.doc.querySelector('[data-example="calculator"]').click();
+    submit(app.win,app.doc.getElementById('mission-form'));
+    await waitFor(async()=>{await app.poll();return app.doc.getElementById('chat-status').textContent==='reviewed';});
+    const brief=app.doc.getElementById('brief-content').textContent;
+    assert.match(brief,/SIMILAR MISSION HISTORY/);
+    assert.match(brief,/Not accepted · engineering, design · evidence run org_prior_blocked/);
+    assert.match(brief,/Accepted · research, communications · evidence run org_prior_accepted/);
+    assert.match(brief,/does not identify which department caused an outcome/);
+    assert.match(brief,/CHECKED TASK EXPERIENCE SHARED WITH HEADS/);
+    assert.match(brief,/engineering-003 \(engineering\): 2 similar checked task\(s\) across 2 mission\(s\), repeated history; evidence org_task_one, org_task_two; proposed for "Implement calculator addition"/);
+    assert.match(brief,/not a rating or automatic assignment/);
     assert.deepEqual(app.errors,[]);
   }finally{app.dom.window.close();}
 });

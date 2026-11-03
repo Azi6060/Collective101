@@ -44,7 +44,14 @@ CREATE TABLE IF NOT EXISTS org_artifacts(
 CREATE TABLE IF NOT EXISTS org_experience(
  run_id TEXT NOT NULL REFERENCES org_runs(id), agent_id TEXT NOT NULL, provider TEXT NOT NULL,
  content TEXT NOT NULL, PRIMARY KEY(run_id,agent_id));
+CREATE TABLE IF NOT EXISTS org_plan_changes(
+ id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES org_runs(id), requested_by TEXT NOT NULL,
+ proposal TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, decided_at TEXT);
 '''
+
+
+class PlanChangeApprovalRequired(RuntimeError):
+    pass
 
 
 class DepartmentOrganization:
@@ -58,8 +65,7 @@ class DepartmentOrganization:
 
     @property
     def provider_signature(self):
-        return encode({'mode':self.provider.name, 'model':getattr(self.provider,'model',None),
-                       'url':getattr(self.provider,'url',None)})
+        return learning.provider_signature(self.provider)
 
     def close(self):
         self.store.close()
@@ -84,10 +90,43 @@ class DepartmentOrganization:
         run = rows[0]
         for field in ('mission','roster','result','provider'):
             run[field] = json.loads(run[field]) if run[field] else None
+        changes=self.store.query('SELECT * FROM org_plan_changes WHERE run_id=?',(run_id,))
+        run['plan_change_request']=None
+        if changes:
+            change=changes[0]
+            run['plan_change_request']={**json.loads(change['proposal']),
+                'id':change['id'],'requested_by':change['requested_by'],
+                'status':change['status'],'created_at':change['created_at'],
+                'decided_at':change['decided_at']}
         return run
 
     def run(self, run_id):
         return repairs.run_with_repairs(self,run_id)
+
+    def decide_plan_change(self, run_id, change_id, decision):
+        contracts.text(change_id,'plan change id',64)
+        if not isinstance(decision,str) or decision not in {'approve','decline'}:
+            raise ValueError('Plan change decision must be approve or decline')
+        with self.store.transaction() as db:
+            run=db.execute('SELECT status FROM org_runs WHERE id=?',(run_id,)).fetchone()
+            if not run:
+                raise ValueError('Unknown departmental mission')
+            if run['status']!='needs_approval':
+                raise ValueError('Mission is not awaiting plan-change approval')
+            change=db.execute('SELECT proposal,status FROM org_plan_changes WHERE id=? AND run_id=?',
+                (change_id,run_id)).fetchone()
+            if not change or change['status']!='pending':
+                raise ValueError('Plan change is not pending for this mission')
+            status='approved' if decision=='approve' else 'declined'
+            updated=db.execute('UPDATE org_plan_changes SET status=?,decided_at=? WHERE id=? AND status=?',
+                (status,now(),change_id,'pending')).rowcount
+            if updated!=1:
+                raise ValueError('Plan change was already decided')
+            db.execute('INSERT INTO org_messages VALUES(?,?,?,?,?,?,?)',
+                (run_id,'plan-change-decision:'+change_id,'human-operator','director-001',
+                 'mission.plan_change.decision',encode({'change_id':change_id,'decision':decision,
+                     'proposal':json.loads(change['proposal'])}),now()))
+        return self.inspect(run_id)
 
     def _run_once(self, run_id):
         run = self.inspect(run_id)
@@ -107,13 +146,26 @@ class DepartmentOrganization:
             self.store.execute("UPDATE org_runs SET status='needs_input' WHERE id=?", (run_id,))
         except RunPaused:
             self.store.execute("UPDATE org_runs SET status='paused' WHERE id=?", (run_id,))
+        except PlanChangeApprovalRequired:
+            self.store.execute("UPDATE org_runs SET status='needs_approval' WHERE id=?", (run_id,))
         except Exception as error:
             self.store.execute("UPDATE org_runs SET status='blocked',error=? WHERE id=?", (str(error),run_id))
         return self.inspect(run_id)
 
-    def _employees(self, department):
-        return [{**{k:a[k] for k in ('id','name','role','skills','responsibilities')},'responsibility_evidence':learning.responsibility(self.store,a['id'],self.provider_signature),'eligible_tools':[t['name'] for t in ToolBroker(self.store,self.roster).catalog(a['id']) if t['available']]}
-                for a in self.roster.values() if a['department'] == department and a['role'] != 'department_lead']
+    def _employees(self, department, query=None):
+        employees=[]
+        for agent in self.roster.values():
+            if agent['department']!=department or agent['role']=='department_lead':
+                continue
+            employee={**{key:agent[key] for key in ('id','name','role','skills','responsibilities')},
+                'responsibility_evidence':learning.responsibility(self.store,agent['id'],self.provider_signature),
+                'eligible_tools':[tool['name'] for tool in ToolBroker(self.store,self.roster).catalog(agent['id']) if tool['available']]}
+            if query:
+                evidence=learning.assignment_evidence(self.store,agent['id'],self.provider,query)
+                if evidence:
+                    employee['similar_task_evidence']=evidence
+            employees.append(employee)
+        return employees
 
     def _cycle(self, run_id, mission):
         repair_context=mission.get('_repair_context')
@@ -121,6 +173,7 @@ class DepartmentOrganization:
         call = lambda key, aid, phase, ctx, validator: self.harness.invoke(run_id,key,aid,phase,{'mission':public_mission,**ctx},validator)
         send = lambda key, sender, recipient, kind, data: self.bus.send(run_id,key,sender,recipient,kind,data)
         proposals = {}
+        assignment_evidence = []
         source_result=None
         affected_tasks=set()
         if repair_context:
@@ -133,6 +186,7 @@ class DepartmentOrganization:
             if not proposals or not selected:
                 raise ValueError('Selective repair source is missing its original department plan')
             chosen={'departments':selected,'reason':'Preserve the original selected department plan during selective repair.'}
+            assignment_evidence.extend(source_result.get('assignment_evidence',[]))
             valid_tasks={(department,task['key']) for department,spec in proposals.items()
                 for task in spec.get('tasks',[])}
             affected_tasks={(item['department'],item['key']) for item in repair_context.get('tasks',[])}
@@ -149,9 +203,13 @@ class DepartmentOrganization:
                     continue
                 head = department+'-001'
                 send('brief:'+department,'director-001',head,'mission.brief',public_mission)
-                context = {'department':department, 'employees':self._employees(department),
+                employees=self._employees(department,mission['objective'])
+                assignment_evidence.extend({'department':department,'agent_id':employee['id'],
+                    **employee['similar_task_evidence']} for employee in employees
+                    if 'similar_task_evidence' in employee)
+                context = {'department':department, 'employees':employees,
                            'available_capabilities':mission['allowed_capabilities'],'tool_catalog':ToolBroker(self.store,self.roster).catalog(),
-                           'instruction':'Ask what useful contribution this department can make. You may decline. Assign at most six tasks to appropriate employees. Assign optional tools in each task tools list only when useful; requires lists essential capabilities. Match tools to the employee eligible_tools and mission permissions. Request missing capabilities honestly.'}
+                           'instruction':'Ask what useful contribution this department can make. You may decline. Assign at most six tasks to appropriate employees. Use similar_task_evidence only as advisory evidence when it fits the proposed task; it contains positive independently checked work, not a rank or guarantee. Lack of evidence means unknown, not poor performance. Choose the employee whose current skills and assignment fit best; you make the assignment. Assign optional tools in each task tools list only when useful; requires lists essential capabilities. Match tools to the employee eligible_tools and mission permissions. Request missing capabilities honestly.'}
                 proposals[department] = call('assess:'+department,head,'assess',context,
                     lambda v,d=department: contracts.proposal(v,d,self.roster))
                 send('proposal:'+department,head,'director-001','department.proposal',proposals[department])
@@ -164,8 +222,8 @@ class DepartmentOrganization:
                 for peer, content in peers.items():
                     send('council:'+peer+':'+department,peer+'-001',head,'council.proposal',content)
                 proposals[department] = call('coordinate:'+department,head,'coordinate',{
-                    'department':department,'employees':self._employees(department),'own_proposal':initial[department],
-                    'head_proposals':peers,'instruction':'Revise or retain your proposal after discussing other heads proposals. Remove duplicated work. Declare department dependencies and use your own employees only. Decline if unnecessary.'},
+                    'department':department,'employees':self._employees(department,mission['objective']),'own_proposal':initial[department],
+                    'head_proposals':peers,'instruction':'Revise or retain your proposal after discussing other heads proposals. Remove duplicated work. Use similar_task_evidence only as advisory evidence when it fits the proposed task; lack of evidence means unknown, not poor performance. Choose the employee whose current skills and assignment fit best; you make the assignment. Declare department dependencies and use your own employees only. Decline if unnecessary.'},
                     lambda v,d=department: contracts.proposal(v,d,self.roster))
                 if set(proposals[department]['depends_on']) - set(initial):
                     raise ValueError('Council requested an unconsulted department; revise the mission shortlist')
@@ -181,7 +239,7 @@ class DepartmentOrganization:
                     continue
                 self.store.execute('INSERT INTO org_artifacts VALUES(?,?,?,?,?,?,?)',
                     (run_id,artifact['id'],artifact['agent_id'],artifact['task_key'],artifact['path'],artifact['content'],artifact['sha256']))
-        reports, blockers, workers, replans = {}, [], set(), []
+        reports, blockers, workers, replans, plan_changes = {}, [], set(), [], []
         for department_index, department in enumerate(order):
             head = department+'-001'
             spec = proposals[department]
@@ -255,18 +313,73 @@ class DepartmentOrganization:
                 department_artifacts.extend(row['id'] for row in self.store.query(
                     'SELECT id FROM org_artifacts WHERE run_id=? AND task_key=? AND path LIKE ? ORDER BY id',
                     (run_id,key,department+'/%')))
+            change_request_available=not repair_context and not replans and not plan_changes and bool(order[department_index+1:])
+            def validate_report(value):
+                result=contracts.report(value,department_artifacts,order[department_index+1:],
+                    not repair_context and not replans and bool(order[department_index+1:]))
+                request=result.get('change_request')
+                if request is not None:
+                    try:
+                        if not change_request_available:
+                            raise ValueError('Plan changes are unavailable after repair or when no selected departments remain')
+                        if result.get('support_request'):
+                            raise ValueError('A report may request passive support or a plan change, not both')
+                        target=request.get('department') if isinstance(request,dict) else None
+                        task=request.get('task') if isinstance(request,dict) else None
+                        permitted=[]
+                        if isinstance(task,dict) and isinstance(task.get('assignee'),str):
+                            permitted=[item['name'] for item in ToolBroker(self.store,self.roster).catalog(
+                                task['assignee']) if item['available']]
+                        result={**result,'change_request':contracts.plan_change_request(
+                            request,order[department_index+1:],chosen['departments'],proposals,
+                            mission,self.roster,set(permitted)&set(mission['allowed_capabilities']))}
+                    except (ValueError,TypeError,KeyError) as error:
+                        result={**result,'change_request':None,
+                            'change_request_status':{'status':'declined','reason':str(error)}}
+                return result
             head_report = call('report:'+department,head,'report',{'department':department,
                 'employee_results':outcomes, 'artifact_ids':department_artifacts,
                 'pending_departments':order[department_index+1:],
-                'support_request_available':not repair_context and not replans and bool(order[department_index+1:]),
-                'instruction':'Collect every employee result and report actual progress, blockers and bounded improvements. Reference only supplied artifact IDs. Do not conceal failed tasks. If useful, you may make one support_request to a department in pending_departments; explain the specific mission-relevant help needed. Omit support_request when none is useful or support_request_available is false.'},
-                lambda v: contracts.report(v,department_artifacts,order[department_index+1:],
-                    not repair_context and not replans and bool(order[department_index+1:])))
+                'support_request_available':change_request_available,
+                'change_request_available':change_request_available,
+                'instruction':'Collect every employee result and report actual progress, blockers and bounded improvements. Reference only supplied artifact IDs. Do not conceal failed tasks. If useful, either request passive support from one pending department or propose exactly one add_task change for an already-selected department in pending_departments; do not do both. The task must use that department’s existing employees and its current mission/tool permissions. A valid proposal pauses the mission for explicit human approval; it does not change the plan unless approved. You cannot change existing tasks, dependencies, mission criteria, capabilities, assignments, or budgets. Omit both requests when no change is necessary.'},
+                validate_report)
             # Runtime blockers cannot be erased by a positive narrative.
             head_report = {**head_report,'employee_results':outcomes,'tool_evidence':[e for v in outcomes.values() for e in v.get('tool_evidence',[])],'blockers':head_report['blockers'] + [b['task']+': '+b['reason'] for b in blockers if b['department']==department],
                            'published_artifacts':self.store.query('SELECT id,path,content,sha256 FROM org_artifacts WHERE run_id=? AND path LIKE ? ORDER BY id',(run_id,department+'/%'))}
             reports[department] = head_report
             send('report:'+department,head,'director-001','department.report',head_report)
+            rejected_change=head_report.get('change_request_status')
+            if rejected_change:
+                plan_changes.append({'requested_by':department,'status':'declined',
+                    'reason':rejected_change['reason']})
+            change_request=head_report.get('change_request')
+            if change_request:
+                existing=self.store.query('SELECT * FROM org_plan_changes WHERE run_id=?',(run_id,))
+                if existing:
+                    saved=existing[0]
+                    if saved['requested_by']!=department or saved['proposal']!=encode(change_request):
+                        raise ValueError('Recorded plan-change request changed during resume')
+                    status=saved['status']
+                    change_id=saved['id']
+                else:
+                    change_id='change_'+uuid.uuid4().hex[:12]
+                    self.store.execute('INSERT INTO org_plan_changes VALUES(?,?,?,?,?,?,?)',
+                        (change_id,run_id,department,encode(change_request),'pending',now(),None))
+                    self.store.execute('INSERT INTO org_messages VALUES(?,?,?,?,?,?,?)',
+                        (run_id,'plan-change-request:'+change_id,'director-001','human-operator',
+                         'mission.plan_change.proposed',encode({'change_id':change_id,
+                             'requested_by':department,'proposal':change_request}),now()))
+                    status='pending'
+                if status=='pending':
+                    raise PlanChangeApprovalRequired('A department proposed a plan change; human approval is required')
+                plan_changes.append({'id':change_id,'requested_by':department,
+                    'status':status,'proposal':change_request})
+                if status=='approved':
+                    target=change_request['department']
+                    original=proposals[target]
+                    updated={**original,'tasks':[*original['tasks'],change_request['task']]}
+                    proposals[target]=contracts.proposal(updated,target,self.roster)
             rejected_support=head_report.get('support_request_status')
             if rejected_support:
                 send('support-outcome:'+department,'director-001',head,'department.support.outcome',rejected_support)
@@ -344,7 +457,7 @@ class DepartmentOrganization:
             check_errors.append('Department heads reported unresolved blockers')
         retrospective = call('retrospective','director-001','retrospective',{
             'head_reports':reports,'independent_review':verdict,'runtime_check_errors':check_errors,'blocked_tasks':blockers,
-            'replans':replans,
+            'replans':replans,'approved_plan_changes':plan_changes,
             'instruction':'Integrate the evidence and propose bounded, measurable organizational improvements. These are hypotheses, not permission, promotion, or automatic self-modification.'},contracts.retrospective)
         for index, improvement in enumerate(retrospective['improvements']):
             send('improvement:'+str(index),'director-001',improvement['department']+'-001','improvement.proposed',improvement)
@@ -352,8 +465,10 @@ class DepartmentOrganization:
             'evidence_mode':self.provider.name,'scope':'Artifact review plus recorded JavaScript/SQL checks where requested; HTML checks are static; no deployment',
             'execution_results':execution_results,
             'consulted_departments':list(proposals),'selected_departments':chosen['departments'],'proposals':proposals,'reports':reports,
+            'assignment_evidence':assignment_evidence,
             'blocked_tasks':blockers,'reviewer':reviewer,'review':verdict,'check_errors':check_errors,
-            'replans':replans,'retrospective':retrospective,'artifact_count':len(artifacts)}
+            'replans':replans,'plan_changes':plan_changes,
+            'retrospective':retrospective,'artifact_count':len(artifacts)}
         if repair_context:
             result['repair_scope']=[{'department':department,'key':key}
                 for department,key in sorted(affected_tasks)]
@@ -463,6 +578,13 @@ class DepartmentOrganization:
         content = '# Collective 101 organizational run\n\n'+f"Mode: {self.provider.name}. Status: {run['status']}. Calls: {run['calls']}.\n\n"+run['mission']['objective']+'\n\n'
         content += 'Scope: artifact review; inspect execution_results for observed JavaScript/SQL checks and tool_evidence for connector activity. No deployment.\n\n'
         content += result.get('retrospective',{}).get('summary',run.get('error') or 'No integrated result')+'\n\n'
+        if result.get('plan_changes'):
+            content += '## Plan changes\n\n'
+            for change in result['plan_changes']:
+                task=change.get('proposal',{}).get('task',{})
+                label=task.get('title') or change.get('reason') or 'Plan change'
+                content += f"- {change['status']}: {label}\n"
+            content += '\n'
         for department, report in result.get('reports',{}).items():
             content += '## '+department+'\n\n'+report['summary']+'\n\n'
         content += '## Artifacts\n\n'+'\n'.join('- '+a['path'] for a in artifacts)+'\n'

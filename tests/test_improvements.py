@@ -90,6 +90,28 @@ class UnmappedReviewProvider(DepartmentFixtureProvider):
             value['criteria'][0]={'criterion':ctx['mission']['acceptance_criteria'][0],
                 'met':False,'evidence':'The deliverable is not sufficiently supported.'}
         return Completion({'role':'assistant','content':json.dumps(value)})
+
+def plan_change_request():
+    return {'kind':'add_task','department':'strategy',
+        'reason':'Research found a material accessibility issue that needs a follow-up.',
+        'task':{'key':'accessibility_followup','title':'Assess the accessibility finding',
+            'instructions':'Assess the new accessibility finding and document its effect on the options.',
+            'assignee':'strategy-005','depends_on':['deliverable'],
+            'requires':['draft_artifact'],'tools':[],'outputs':['accessibility.md']}}
+
+class PlanChangeProvider(DepartmentFixtureProvider):
+    def __init__(self,request=None):
+        self.request=plan_change_request() if request is None else request
+        self.work_calls=[]
+    def complete(self,messages,tools=None):
+        ctx=json.loads(messages[1]['content'])
+        value=json.loads(super().complete(messages,tools).message['content'])
+        if ctx['phase']=='report' and ctx['department']=='research' and self.request is not None:
+            value['change_request']=self.request
+        if ctx['phase']=='work':
+            self.work_calls.append((ctx['agent_id'].split('-',1)[0],ctx['task']['key']))
+        return Completion({'role':'assistant','content':json.dumps(value)})
+
 class Improvements(unittest.TestCase):
     def setUp(self):
         root=ROOT/'work/improvement-tests';root.mkdir(parents=True,exist_ok=True)
@@ -251,6 +273,93 @@ class Improvements(unittest.TestCase):
         self.assertEqual(len(self.org.store.query("SELECT * FROM org_messages WHERE run_id=? AND kind='department.support.request'",(rid,))),1)
         self.assertIsNone(provider.strategy_passive_insights[0])
         self.assertEqual(run['result']['replans'][0]['status'],'advisory')
+
+    def test_plan_change_waits_for_explicit_human_approval(self):
+        provider=PlanChangeProvider();self.org.provider=provider
+        m=mission();m.update(departments=['research','strategy'],inputs={'fixture_scenario':'research'},
+            artifact_checks=[],max_repair_rounds=0)
+        rid=self.org.create(m);run=self.org.run(rid)
+        self.assertEqual(run['status'],'needs_approval',run['error'])
+        change=run['plan_change_request']
+        self.assertEqual(change['status'],'pending')
+        self.assertEqual(change['task'],plan_change_request()['task'])
+        self.assertEqual(provider.work_calls,[('research','deliverable')])
+        with self.assertRaisesRegex(ValueError,'not pending'):
+            self.org.decide_plan_change(rid,'change_not_this_run','approve')
+        with self.assertRaisesRegex(ValueError,'decision must be'):
+            self.org.decide_plan_change(rid,change['id'],'skip')
+        calls=run['calls']
+        self.assertEqual(self.org.run(rid)['status'],'needs_approval')
+        self.assertEqual(self.org.inspect(rid)['calls'],calls)
+        self.assertEqual(provider.work_calls,[('research','deliverable')])
+        self.assertEqual(self.org.store.query("SELECT COUNT(*) AS n FROM org_messages WHERE run_id=? AND kind='mission.plan_change.proposed'",(rid,))[0]['n'],1)
+
+    def test_pending_plan_change_survives_runtime_reopen(self):
+        provider=PlanChangeProvider();self.org.provider=provider
+        m=mission();m.update(departments=['research','strategy'],inputs={'fixture_scenario':'research'},
+            artifact_checks=[],max_repair_rounds=0)
+        rid=self.org.create(m);pending=self.org.run(rid)
+        state=self.org.db_path
+        self.org.close()
+        self.org=DepartmentOrganization(state,provider)
+        resumed=self.org.inspect(rid)
+        self.assertEqual(resumed['status'],'needs_approval')
+        self.assertEqual(resumed['plan_change_request']['id'],pending['plan_change_request']['id'])
+        self.assertEqual(resumed['plan_change_request']['status'],'pending')
+        self.org.decide_plan_change(rid,resumed['plan_change_request']['id'],'approve')
+        self.assertEqual(self.org.run(rid)['status'],'reviewed')
+        self.assertIn(('strategy','accessibility_followup'),provider.work_calls)
+
+    def test_approved_plan_change_adds_only_the_reviewed_task(self):
+        provider=PlanChangeProvider();self.org.provider=provider
+        m=mission();m.update(departments=['research','strategy'],inputs={'fixture_scenario':'research'},
+            artifact_checks=[],max_repair_rounds=0)
+        rid=self.org.create(m);pending=self.org.run(rid)
+        self.org.decide_plan_change(rid,pending['plan_change_request']['id'],'approve')
+        run=self.org.run(rid)
+        self.assertEqual(run['status'],'reviewed',run['error'])
+        self.assertEqual(run['result']['proposals']['strategy']['tasks'][0]['key'],'deliverable')
+        self.assertEqual(run['result']['proposals']['strategy']['tasks'][1],plan_change_request()['task'])
+        self.assertEqual(provider.work_calls,[('research','deliverable'),('strategy','deliverable'),('strategy','accessibility_followup')])
+        self.assertEqual(run['result']['plan_changes'][0]['status'],'approved')
+        self.assertEqual(run['mission']['acceptance_criteria'],m['acceptance_criteria'])
+        self.assertEqual(run['mission']['allowed_capabilities'],m['allowed_capabilities'])
+        decision=self.org.store.query("SELECT sender,recipient,kind,content FROM org_messages WHERE run_id=? AND kind='mission.plan_change.decision'",(rid,))[0]
+        self.assertEqual((decision['sender'],decision['recipient']),('human-operator','director-001'))
+        self.assertEqual(json.loads(decision['content'])['decision'],'approve')
+        with self.assertRaisesRegex(ValueError,'not awaiting'):
+            self.org.decide_plan_change(rid,pending['plan_change_request']['id'],'decline')
+
+    def test_declined_plan_change_continues_the_original_plan_unchanged(self):
+        provider=PlanChangeProvider();self.org.provider=provider
+        m=mission();m.update(departments=['research','strategy'],inputs={'fixture_scenario':'research'},
+            artifact_checks=[],max_repair_rounds=0)
+        rid=self.org.create(m);pending=self.org.run(rid)
+        self.org.decide_plan_change(rid,pending['plan_change_request']['id'],'decline')
+        run=self.org.run(rid)
+        self.assertEqual(run['status'],'reviewed',run['error'])
+        self.assertEqual([task['key'] for task in run['result']['proposals']['strategy']['tasks']],['deliverable'])
+        self.assertEqual(provider.work_calls,[('research','deliverable'),('strategy','deliverable')])
+        self.assertEqual(run['result']['plan_changes'][0]['status'],'declined')
+
+    def test_invalid_plan_change_is_recorded_and_cannot_expand_scope_or_permissions(self):
+        invalid_requests=[]
+        request=plan_change_request();request['department']='assurance';invalid_requests.append(request)
+        request=plan_change_request();request['task']['assignee']='engineering-003';invalid_requests.append(request)
+        request=plan_change_request();request['task']['requires']=['web_search'];invalid_requests.append(request)
+        request=plan_change_request();request['task']['outputs']=['options.md'];invalid_requests.append(request)
+        request=plan_change_request();request['task']['depends_on']=['unknown'];invalid_requests.append(request)
+        for index,request in enumerate(invalid_requests):
+            with self.subTest(request=request):
+                provider=PlanChangeProvider(request);self.org.provider=provider
+                m=mission();m.update(departments=['research','strategy'],inputs={'fixture_scenario':'research'},
+                    artifact_checks=[],max_repair_rounds=0)
+                run=self.org.run(self.org.create(m))
+                self.assertEqual(run['status'],'reviewed',run['error'])
+                self.assertIsNone(run['plan_change_request'])
+                self.assertEqual(run['result']['plan_changes'][0]['status'],'declined')
+                self.assertEqual([task['key'] for task in run['result']['proposals']['strategy']['tasks']],['deliverable'])
+                self.assertEqual(provider.work_calls,[('research','deliverable'),('strategy','deliverable')])
     def test_unmapped_review_failure_stays_blocked_without_blind_repair(self):
         self.org.provider=UnmappedReviewProvider();m=mission();m['artifact_checks']=[]
         rid=self.org.create(m);run=self.org.run(rid)
@@ -300,6 +409,55 @@ class Improvements(unittest.TestCase):
         self.assertEqual(len(cards),1);self.assertEqual(cards[0]['evidence_runs'],['a','b'])
         self.assertEqual(recall_cards(self.org.store,'research-004','fixture','c','onboarding'),[])
         self.assertEqual(recall_cards(self.org.store,'research-003','meta','c','onboarding'),[])
+    def test_assignment_evidence_uses_only_live_accepted_checked_own_outputs(self):
+        from collective101 import learning
+        class EvidenceProvider:
+            name='meta'
+            model='evidence-test'
+            url='https://model.example.test/v1'
+        self.org.provider=EvidenceProvider()
+        objective='Write an accessible onboarding guide for remote team members'
+        task={'key':'guide','title':'Write accessible onboarding guide',
+            'instructions':'Create an accessible onboarding guide for remote team members.',
+            'assignee':'research-003','outputs':['brief.md']}
+        unverified={'key':'appendix','title':'Write an accessible onboarding appendix',
+            'instructions':'Create an accessible onboarding appendix for remote team members.',
+            'assignee':'research-004','outputs':['appendix.md']}
+        run_ids=[]
+        for index in range(2):
+            current_mission=mission();current_mission['objective']=objective
+            rid=self.org.create(current_mission);run_ids.append(rid)
+            self.org.store.execute('INSERT INTO org_artifacts VALUES(?,?,?,?,?,?,?)',
+                (rid,'research:guide:brief.md','research-003','guide','research/brief.md','CORRECTED content','digest'))
+            self.org.store.execute('INSERT INTO org_artifacts VALUES(?,?,?,?,?,?,?)',
+                (rid,'research:appendix:appendix.md','research-004','appendix','research/appendix.md','Unverified content','digest'))
+            result={'accepted':True,'check_errors':[],'execution_results':[],
+                'proposals':{'research':{'tasks':[task,unverified]}}}
+            learning.record_task_evidence(self.org,rid,rid,result)
+        evidence=learning.assignment_evidence(self.org.store,'research-003',self.org.provider,objective)
+        self.assertEqual(evidence['similar_verified_tasks'],2)
+        self.assertEqual(evidence['verified_missions'],2)
+        self.assertEqual(evidence['history_strength'],'repeated')
+        self.assertCountEqual(evidence['evidence_runs'],run_ids)
+        self.assertIsNone(learning.assignment_evidence(self.org.store,'research-004',self.org.provider,objective))
+        self.assertIsNone(learning.assignment_evidence(self.org.store,'research-003',self.org.provider,
+            'Create a financial forecast for the next fiscal quarter'))
+        different_provider=EvidenceProvider();different_provider.model='other-model'
+        self.assertIsNone(learning.assignment_evidence(self.org.store,'research-003',different_provider,objective))
+        employee=next(agent for agent in self.org._employees('research',objective) if agent['id']=='research-003')
+        self.assertEqual(employee['similar_task_evidence'],evidence)
+        self.assertNotIn('similar_task_evidence',
+            next(agent for agent in self.org._employees('research',objective) if agent['id']=='research-004'))
+
+        rejected_mission=mission();rejected_mission['objective']=objective
+        rejected=self.org.create(rejected_mission)
+        learning.record_task_evidence(self.org,rejected,rejected,{'accepted':False,'proposals':{'research':{'tasks':[task]}}})
+        self.assertEqual(learning.assignment_evidence(self.org.store,'research-003',self.org.provider,objective)['verified_missions'],2)
+
+        self.org.provider=RepairProvider()
+        fixture=self.org.create(rejected_mission)
+        learning.record_task_evidence(self.org,fixture,fixture,{'accepted':True,'proposals':{'research':{'tasks':[task]}}})
+        self.assertIsNone(learning.assignment_evidence(self.org.store,'research-003',self.org.provider,objective))
     def test_responsibility_ignores_fixtures_and_duplicate_objectives_and_never_grants_tools(self):
         from collective101.learning import responsibility
         for i in range(4):
