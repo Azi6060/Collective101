@@ -16,7 +16,7 @@ def feedback(store,run):
     for item in artifacts:
         excerpt=item['content'][:max(0,min(8000,remaining))];remaining-=len(excerpt)
         excerpts.append({**item,'content':excerpt,'truncated':len(excerpt)<len(item['content'])})
-    return {'previous_run':run['id'],'review':result['review'],'check_errors':result['check_errors'],
+    return {'previous_run':run['id'],'review':result['review'],'check_errors':result['check_errors'],'blocked_tasks':result['blocked_tasks'],
         'previous_artifacts':excerpts,'instruction':'Your independent review or deterministic checks failed. Heads must assign corrections and refresh dependent deliverables. Preserve the original objective, permissions and acceptance criteria. Re-review is mandatory; past evidence does not count as a new successful check.'}
 
 def run_with_repairs(org,root):
@@ -28,11 +28,12 @@ def run_with_repairs(org,root):
     history=[]
     for number in range(1,rounds+1):
         result=current.get('result')
-        if current['status']!='blocked' or not result or result['accepted'] or result['blocked_tasks']:break
+        hard_blockers=any(task.get('capability_requests') for task in (result or {}).get('blocked_tasks',[]))
+        if current['status']!='blocked' or not result or result['accepted'] or hard_blockers:break
         history.append({'run_id':current['id'],'accepted':False,'review':result['review'],'check_errors':result['check_errors']})
         previous=org.store.query('SELECT run_id FROM org_repairs WHERE root_id=? AND round=?',(root,number))
         from .department_runtime import DepartmentOrganization
-        child=DepartmentOrganization(org.db_path,org.provider)
+        child=DepartmentOrganization(org.db_path,org.provider,concurrency=org.concurrency,memory_enabled=org.memory_enabled)
         try:
             if previous:rid=previous[0]['run_id']
             else:

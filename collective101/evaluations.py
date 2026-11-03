@@ -1,21 +1,32 @@
 """Reproducible, bounded evaluation runner; real model execution is explicit."""
 import json,time,uuid
 from pathlib import Path
-from .provider import parse_object
+from .provider import parse_object,ProviderError
 from .store import encode
 from .sandbox import execute_javascript
 from .html_checks import check_html
 
 class MeteredProvider:
-    def __init__(self,provider,max_calls=80,max_units=2000000):
+    def __init__(self,provider,max_calls=80,max_units=2000000,should_stop=None):
         if not 1<=max_calls<=160:raise ValueError('Evaluation call cap must be 1 to 160')
         self.provider=provider;self.name=provider.name;self.model=getattr(provider,'model',None);self.url=getattr(provider,'url',None)
         self.max_calls=max_calls;self.max_units=max_units;self.calls=0;self.tokens=0;self.units=0
+        self.should_stop=should_stop
     def complete(self,messages,tools=None):
-        charge=len(encode(messages).encode())+4096
+        return self.complete_with_options(messages,self.request_options('work'),tools)
+    def request_options(self,phase='work',output_retries=0,transport_retries=0):
+        if hasattr(self.provider,'request_options'):return self.provider.request_options(phase,output_retries,transport_retries)
+        return {'max_tokens':4096,'timeout':120,'reasoning_effort':'medium'}
+    def complete_with_options(self,messages,options,tools=None):
+        if self.should_stop and self.should_stop():raise RuntimeError('Evaluation cancelled before the next request')
+        charge=len(encode(messages).encode())+options['max_tokens']
         if self.calls>=self.max_calls or self.units+charge>self.max_units:raise RuntimeError('Evaluation budget exhausted')
         self.calls+=1;self.units+=charge
-        completion=self.provider.complete(messages,tools) if tools is not None else self.provider.complete(messages)
+        try:
+            completion=self.provider.complete_with_options(messages,options,tools) if hasattr(self.provider,'complete_with_options') else self.provider.complete(messages,tools) if tools is not None else self.provider.complete(messages)
+        except ProviderError as error:
+            self.tokens+=error.tokens
+            raise
         self.tokens+=completion.tokens;return completion
 
 def run_evaluation(provider,output_root,max_calls=80):

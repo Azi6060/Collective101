@@ -1,4 +1,4 @@
-﻿"""Loopback-only mission console. No generated artifact is served as executable HTML."""
+"""Loopback console. Generated HTML is served only on the isolated preview origin."""
 import json
 import mimetypes
 import secrets
@@ -7,6 +7,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from .console import MissionConsole
 from .locking import workspace_lock
+from .preview import PreviewManager
+from . import budgets
 
 WEB = Path(__file__).parent/'web'
 
@@ -14,10 +16,11 @@ WEB = Path(__file__).parent/'web'
 def make_server(state,port=8765,console=None):
     service=console or MissionConsole(state)
     token=secrets.token_urlsafe(32)
+    previews=PreviewManager(service)
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args): pass
 
-        def send(self,status,payload,content_type='application/json; charset=utf-8'):
+        def send(self,status,payload,content_type='application/json; charset=utf-8',headers=None):
             body=json.dumps(payload,ensure_ascii=False).encode() if isinstance(payload,(dict,list)) else payload
             self.send_response(status)
             self.send_header('Content-Type',content_type)
@@ -26,6 +29,7 @@ def make_server(state,port=8765,console=None):
             self.send_header('X-Content-Type-Options','nosniff')
             self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
             self.send_header('Referrer-Policy','no-referrer')
+            for key,value in (headers or {}).items():self.send_header(key,value)
             self.end_headers()
             self.wfile.write(body)
 
@@ -46,12 +50,18 @@ def make_server(state,port=8765,console=None):
                 if not self.authorized(): return self.send(403,{'error':'Console session required'})
                 try:
                     if path=='/api/health': result=service.health()
+                    elif path=='/api/evaluations':result=service.evaluations.overview()
+                    elif path=='/api/lessons':result=service.evaluations.lessons()
+                    elif path.startswith('/api/evaluations/'):result=service.evaluations.detail(path.removeprefix('/api/evaluations/'))
                     elif path=='/api/connectors': result=service.connectors.list()
                     elif path=='/api/knowledge':
                         from .knowledge import documents
                         result=documents()
                     elif path=='/api/organization': result=service.roster()
                     elif path=='/api/chats': result=service.list_chats()
+                    elif path.startswith('/api/chats/') and path.endswith('/artifacts.zip'):
+                        cid=path.removeprefix('/api/chats/').removesuffix('/artifacts.zip')
+                        return self.send(200,service.artifact_bundle(cid),'application/zip',{'Content-Disposition':'attachment; filename="collective101-files.zip"'})
                     elif path.startswith('/api/chats/'):
                         result=service.chat(path.removeprefix('/api/chats/'))
                     elif path.startswith('/api/activity/'):
@@ -59,8 +69,9 @@ def make_server(state,port=8765,console=None):
                     else: return self.send(404,{'error':'Not found'})
                     return self.send(200,result)
                 except ValueError as error: return self.send(404,{'error':str(error)})
-            files={'/':'index.html','/chat':'index.html','/organization':'index.html','/activity':'index.html','/connectors':'index.html',
-                   '/app.css':'app.css','/app.js':'app.js','/vendor/bootstrap.min.css':'vendor/bootstrap.min.css'}
+            files={'/':'index.html','/chat':'index.html','/organization':'index.html','/activity':'index.html','/connectors':'index.html','/evaluations':'index.html',
+                   '/app.css':'app.css','/app.js':'app.js','/markdown.js':'markdown.js','/vendor/marked.umd.js':'vendor/marked.umd.js',
+                   '/vendor/purify.min.js':'vendor/purify.min.js','/vendor/bootstrap.min.css':'vendor/bootstrap.min.css'}
             if path not in files: return self.send(404,{'error':'Not found'})
             target=WEB/files[path]
             if not target.is_file(): return self.send(404,{'error':'Asset unavailable'})
@@ -77,7 +88,16 @@ def make_server(state,port=8765,console=None):
                 if not isinstance(payload,dict): raise ValueError('Request must be an object')
                 path=urlsplit(self.path).path
                 if path=='/api/chats':
-                    result=service.submit(payload.get('message'),payload.get('mode','meta'),payload.get('request_id'),payload.get('max_calls',160),payload.get('max_tokens',2000000),payload.get('allow_web',False))
+                    result=service.submit(payload.get('message'),payload.get('mode','meta'),payload.get('request_id'),payload.get('max_calls',160),payload.get('max_tokens',budgets.MAX_ADMISSION_UNITS),payload.get('allow_web',False))
+                elif path=='/api/evaluations':result=service.evaluations.start(payload)
+                elif path=='/api/lessons':result=service.evaluations.propose_lesson(payload)
+                elif path.startswith('/api/lessons/') and path.endswith('/review'):
+                    from .learning import review_lesson
+                    result=review_lesson(service.store,path.removeprefix('/api/lessons/').removesuffix('/review'),payload.get('accepted'),payload.get('note'))
+                elif path.startswith('/api/evaluations/') and path.endswith('/stop'):
+                    result=service.evaluations.stop(path.removeprefix('/api/evaluations/').removesuffix('/stop'))
+                elif path.startswith('/api/evaluation-trials/') and path.endswith('/review'):
+                    result=service.evaluations.review(path.removeprefix('/api/evaluation-trials/').removesuffix('/review'),payload.get('accepted'),payload.get('note'))
                 elif path=='/api/connectors':
                     result=service.connectors.save(payload)
                 elif path=='/api/knowledge':
@@ -98,6 +118,7 @@ def make_server(state,port=8765,console=None):
                     if action=='answers': result=service.answer(cid,payload.get('answers'),payload.get('intervention_id'))
                     elif action=='messages': result=service.message(cid,payload.get('message'))
                     elif action=='control': result=service.control(cid,payload.get('action'))
+                    elif action=='preview': result=previews.open(cid,payload.get('entry'))
                     else: return self.send(404,{'error':'Not found'})
                 return self.send(200,result)
             except (ValueError,KeyError,TypeError) as error:
@@ -105,7 +126,11 @@ def make_server(state,port=8765,console=None):
             except Exception:
                 return self.send(500,{'error':'Local service error. Inspect server state.'})
 
-    server=ThreadingHTTPServer(('127.0.0.1',port),Handler)
+    class ConsoleServer(ThreadingHTTPServer):
+        def server_close(self):
+            previews.close()
+            super().server_close()
+    server=ConsoleServer(('127.0.0.1',port),Handler)
     server.daemon_threads=True
     server.service=service
     return server

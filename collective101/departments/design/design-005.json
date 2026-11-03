@@ -20,6 +20,7 @@
   "tool_allowlist": [
     "knowledge_search",
     "knowledge_read",
-    "memory_search"
+    "memory_search",
+    "browser_sandbox"
   ]
 }

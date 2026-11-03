@@ -25,6 +25,7 @@
     "knowledge_read",
     "memory_search",
     "javascript_sandbox",
-    "sql_sandbox"
+    "sql_sandbox",
+    "python_sandbox"
   ]
 }

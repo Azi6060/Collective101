@@ -1,10 +1,11 @@
 ﻿"""Persistent admission budgets shared by intake and all mission model requests.
 
-Charged units reserve UTF-8 request bytes + the provider's 4096 output cap.
+Charged units reserve UTF-8 request bytes + the current request's output cap.
 This deliberately conservative estimate is not an exact tokenizer or invoice.
 Failed/uncertain requests retain their reservation, including across restart.
 """
 from .store import CallBudgetExceeded, encode
+from .context_limits import check_input,MAX_ADMISSION_UNITS
 
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS org_budgets(
@@ -16,15 +17,17 @@ CREATE TABLE IF NOT EXISTS console_permissions(chat_id TEXT PRIMARY KEY, web_sea
 CREATE TABLE IF NOT EXISTS console_safety(chat_id TEXT PRIMARY KEY, reason TEXT NOT NULL, acknowledged INTEGER NOT NULL DEFAULT 0);
 '''
 
-def create_budget(store,key,max_calls=160,max_tokens=2000000):
+def create_budget(store,key,max_calls=160,max_tokens=MAX_ADMISSION_UNITS):
     if type(max_calls) is not int or not 1<=max_calls<=160:
         raise ValueError('Task call cap must be between 1 and 160')
-    if type(max_tokens) is not int or not 4096<=max_tokens<=2000000:
-        raise ValueError('Task token admission cap must be between 4096 and 2000000')
+    if type(max_tokens) is not int or not 4096<=max_tokens<=MAX_ADMISSION_UNITS:
+        raise ValueError(f'Task token admission cap must be between 4096 and {MAX_ADMISSION_UNITS}')
     store.execute('INSERT OR IGNORE INTO org_budgets(id,max_calls,max_tokens) VALUES(?,?,?)',(key,max_calls,max_tokens))
 
-def reserve(store,key,messages):
-    charge=len(encode(messages).encode('utf-8'))+4096
+def reserve(store,key,messages,output_tokens=4096):
+    if type(output_tokens) is not int or not 1<=output_tokens<=32768:
+        raise ValueError('Invalid request output reservation')
+    charge=check_input(messages)+output_tokens
     with store.transaction() as db:
         changed=db.execute('''UPDATE org_budgets SET calls=calls+1,charged_tokens=charged_tokens+?
             WHERE id=? AND calls<max_calls AND charged_tokens+?<=max_tokens AND reported_tokens+?<=max_tokens''',

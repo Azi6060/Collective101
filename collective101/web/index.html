@@ -1,86 +1,507 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Collective 101 · Mission control</title>
-<link rel="stylesheet" href="/vendor/bootstrap.min.css"><link rel="stylesheet" href="/app.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Collective 101 · Autonomous Organization</title>
+<link rel="stylesheet" href="/vendor/bootstrap.min.css">
+<link rel="stylesheet" href="/app.css">
+<script src="/vendor/marked.umd.js" defer></script>
+<script src="/vendor/purify.min.js" defer></script>
+<script src="/markdown.js" defer></script>
 <script src="/app.js" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
 <div class="app-shell">
 <aside class="sidebar" aria-label="Primary navigation">
-<a href="/" class="brand" data-nav="overview"><span class="brand-mark">C<span>101</span></span><span>Collective<span class="brand-sub">AN ORGANIZATION THAT THINKS</span></span></a>
-<div class="workspace-label">YOUR WORKSPACE <span class="workspace-dot"></span></div>
-<nav class="nav flex-column gap-1">
-<a href="/" data-nav="overview" class="nav-link active"><span class="nav-icon">◫</span> Overview</a>
-<a href="/organization" data-nav="organization" class="nav-link"><span class="nav-icon">▦</span> Organization <span class="nav-count">101</span></a>
-<a href="/chat" data-nav="chat" class="nav-link"><span class="nav-icon">▱</span> Mission chat</a>
-<a href="/connectors" data-nav="connectors" class="nav-link"><span class="nav-icon">?</span> Connectors</a>
-<a href="/activity" data-nav="activity" class="nav-link"><span class="nav-icon">≋</span> Activity & evidence</a>
-</nav>
-<div class="sidebar-rule"></div><div class="workspace-label">RECENT MISSIONS</div>
-<div id="recent-missions" class="recent-missions"><p class="muted-sidebar">Your missions will appear here.</p></div>
-<div class="sidebar-bottom"><div class="local-indicator"><span class="workspace-dot"></span> Local workspace</div><p>Your organization. Your machine.</p><span class="version-label">COLLECTIVE 101 / v0.4</span></div>
+  <button id="toggle-sidebar" class="nav-toggle" type="button" aria-label="Collapse navigation" aria-expanded="true" title="Collapse navigation">
+    <svg class="toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect width="18" height="18" x="3" y="3" rx="2"/>
+      <path d="M9 3v18"/>
+      <path d="m14 9-3 3 3 3"/>
+    </svg>
+  </button>
+  <a href="/" class="brand" data-goto="overview">
+    <span class="brand-mark" aria-hidden="true">
+      <span class="brand-letter">C</span>
+      <span class="brand-num">101</span>
+    </span>
+    <span class="brand-text">
+      <span class="brand-title">Collective</span>
+      <span class="brand-sub">AN ORGANIZATION THAT THINKS</span>
+    </span>
+  </a>
+  <div class="workspace-label"><span>WORKSPACE</span><span class="workspace-dot" aria-hidden="true"></span></div>
+  <button id="new-chat" class="new-mission nav-new-chat" type="button" aria-label="New chat" title="New chat">
+    <span class="nav-icon" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </span>
+    <span class="nav-label">New chat</span>
+  </button>
+  <nav class="nav flex-column gap-1">
+    <a href="/" data-nav="overview" class="nav-link active">
+      <span class="nav-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+      </span>
+      Overview
+    </a>
+    <a href="/organization" data-nav="organization" class="nav-link">
+      <span class="nav-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </span>
+      Organization <span class="nav-count">101</span>
+    </a>
+    <a href="/chat" data-nav="chat" class="nav-link">
+      <span class="nav-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </span>
+      Chat
+    </a>
+    <a href="/connectors" data-nav="connectors" class="nav-link">
+      <span class="nav-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="8" x="5" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 10v4"/><path d="M18 10v4"/></svg>
+      </span>
+      Connectors
+    </a>
+    <a href="/evaluations" data-nav="evaluations" class="nav-link"><span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16M7 16V9m5 7V4m5 12v-5"/></svg></span>Effectiveness</a>
+    <a href="/activity" data-nav="activity" class="nav-link">
+      <span class="nav-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      </span>
+      Activity &amp; evidence
+    </a>
+  </nav>
+  <div class="sidebar-rule"></div>
+  <div class="workspace-label"><span>RECENT CHATS</span></div>
+  <div id="recent-missions" class="recent-missions"><p class="muted-sidebar">No chats started yet</p></div>
+  <div class="sidebar-bottom">
+    <div class="version-badge"><span class="version-label">COLLECTIVE 101</span></div>
+  </div>
 </aside>
+
 <div class="main-shell">
-<header class="topbar"><div class="breadcrumb-label">Workspace <span>/</span> <strong id="breadcrumb">Overview</strong></div><div class="header-status"><span class="status-dot"></span><span id="connection-status">Connecting</span><span class="avatar">AK</span></div></header>
+<header class="topbar">
+  <div class="breadcrumb-label">Workspace <span>/</span> <strong id="breadcrumb">Overview</strong></div>
+  <div class="header-status">
+    <span class="status-dot" aria-hidden="true"></span>
+    <span id="connection-status">Connecting</span>
+    <span class="avatar">AK</span>
+  </div>
+</header>
+
 <main id="main" tabindex="-1">
 <div id="notice" role="alert" class="alert alert-danger d-none"></div>
+
 <section id="view-overview" class="view">
-<div class="page-heading"><div><div class="eyebrow">MISSION CONTROL</div><h1>One organization.<br>A hundred and one minds.</h1><p class="lead-copy">Turn an ambitious request into coordinated, visible work.</p></div><button class="btn btn-primary new-mission">＋ New mission</button></div>
-<div class="metrics-grid">
-<div class="metric"><span>REGISTERED AGENTS</span><div>101 <small>across the organization</small></div><p>1 director · 10 heads · 90 employees</p></div>
-<div class="metric"><span>DEPARTMENTS</span><div>10 <small>working together</small></div><p>Specialized roles. Shared objectives.</p></div>
-<div class="metric"><span>MISSION ACTIVITY</span><div id="metric-active">0 <small>in progress</small></div><p id="metric-runs">No missions started yet</p></div>
-<div class="metric"><span>EXECUTION HARNESS</span><div class="metric-word" id="metric-sandbox">Checking</div><p>Isolated JavaScript · recorded results</p></div>
-</div>
-<div class="row g-4 mt-1">
-<div class="col-xl-8"><div class="panel start-panel"><div class="panel-top"><span class="mini-label">START WITH AN OUTCOME</span><span class="tag">Head-led collaboration</span></div><h2>What should we work on?</h2><p>Tell the director what you want to achieve. Department heads find their contribution, assign their teams, and report back.</p><button class="mission-prompt" id="start-chat">Describe a mission for your organization… <span>↗</span></button><div class="starter-buttons"><button class="btn btn-light starter" data-example="website">Build a website ↗</button><button class="btn btn-light starter" data-example="calculator">Test JavaScript ↗</button><button class="btn btn-light starter" data-example="research">Explore a decision ↗</button></div></div>
-<div class="panel mt-4"><div class="section-heading"><h2>Recent missions</h2><a href="/chat" data-nav="chat">Open chat ↗</a></div><div id="mission-list" class="empty-state"><span class="empty-symbol">◎</span><h3>A clear starting point.</h3><p>Start your first mission to see departments, decisions, and deliverables here.</p></div></div></div>
-<div class="col-xl-4"><div class="panel workflow-panel"><div class="mini-label">HOW WORK MOVES</div><h2>From intent to evidence.</h2><ol class="workflow"><li><span>01</span><div><strong>Clarify the mission</strong><p>Resolve the questions that matter.</p></div></li><li><span>02</span><div><strong>Bring in the right heads</strong><p>Departments propose useful work.</p></div></li><li><span>03</span><div><strong>Assign and execute</strong><p>Employees work within their roles.</p></div></li><li><span>04</span><div><strong>Review the evidence</strong><p>Independent checks precede acceptance.</p></div></li></ol><div class="readiness-box"><strong id="model-status">Checking model configuration</strong><p id="model-description">Provider availability is checked locally.</p></div></div></div>
-</div>
+  <div class="overview-hero">
+    <div class="overview-hero-copy">
+      <div class="overview-badge"><span class="pulse-dot" aria-hidden="true"></span> MISSION COMMAND · 101 AGENTS</div>
+      <h1>Autonomous Organization Workspace</h1>
+      <p class="lead-copy">Direct 101 persistent specialists across 10 departments. Autonomous coordination, head-led shortlists, and verified deliverable execution.</p>
+    </div>
+    <div class="overview-hero-actions">
+      <button class="btn btn-primary new-mission">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        New mission
+      </button>
+    </div>
+  </div>
+
+  <div class="launchpad-card">
+    <div class="launchpad-header">
+      <span class="mini-label">LAUNCH A MISSION</span>
+      <span class="tag">Head-led collaboration</span>
+    </div>
+    <button class="mission-prompt" id="start-chat" type="button" aria-label="Describe a task for your organization">
+      <span class="prompt-text">Describe a task or goal for your organization…</span>
+      <span class="prompt-key">Launch <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+    </button>
+    <div class="starter-group">
+      <span class="starter-label">Quick templates:</span>
+      <button class="btn btn-light starter" data-example="website" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/></svg>
+        Build a website
+      </button>
+      <button class="btn btn-light starter" data-example="calculator" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"/></svg>
+        Test JavaScript
+      </button>
+      <button class="btn btn-light starter" data-example="research" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        Explore a decision
+      </button>
+    </div>
+  </div>
+
+  <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-header"><span>REGISTERED AGENTS</span></div>
+      <div>101 <small>across organization</small></div>
+      <p>1 director · 10 heads · 90 employees</p>
+    </div>
+    <div class="metric">
+      <div class="metric-header"><span>DEPARTMENTS</span></div>
+      <div>10 <small>working together</small></div>
+      <p>Specialized roles · Shared objectives</p>
+    </div>
+    <div class="metric">
+      <div class="metric-header"><span>CHAT ACTIVITY</span></div>
+      <div id="metric-active">0 <small>in progress</small></div>
+      <p id="metric-runs">No chats started yet</p>
+    </div>
+    <div class="metric">
+      <div class="metric-header"><span>EXECUTION HARNESS</span></div>
+      <div class="metric-word" id="metric-sandbox">Checking</div>
+      <p>Isolated JavaScript · Recorded results</p>
+    </div>
+  </div>
+
+  <div class="row g-4 mt-1">
+    <div class="col-xl-8">
+      <div class="panel">
+        <div class="section-heading">
+          <h2>Recent chats</h2>
+          <a href="/chat" data-goto="chat" class="view-all-link">Open chat <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
+        </div>
+        <div id="mission-list" class="empty-state">
+          <div class="empty-symbol" aria-hidden="true">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3>A clear starting point.</h3>
+          <p>Start your first chat to see departments, decisions, and deliverables here.</p>
+        </div>
+      </div>
+
+      <div class="panel mt-4">
+        <div class="section-heading">
+          <h2>Department Roster &amp; Specializations</h2>
+          <a href="/organization" data-goto="organization" class="view-all-link">View all 101 agents <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
+        </div>
+        <div class="overview-departments-grid">
+          <a href="/organization" data-goto="organization" class="dept-capsule">
+            <span class="dept-capsule-badge">ENG</span>
+            <div class="dept-capsule-info"><strong>Engineering &amp; Automation</strong><span>16 specialists · engineering-001</span></div>
+          </a>
+          <a href="/organization" data-goto="organization" class="dept-capsule">
+            <span class="dept-capsule-badge">DES</span>
+            <div class="dept-capsule-info"><strong>Design &amp; Media</strong><span>8 specialists · design-001</span></div>
+          </a>
+          <a href="/organization" data-goto="organization" class="dept-capsule">
+            <span class="dept-capsule-badge">RES</span>
+            <div class="dept-capsule-info"><strong>Research &amp; Intelligence</strong><span>10 specialists · research-001</span></div>
+          </a>
+          <a href="/organization" data-goto="organization" class="dept-capsule">
+            <span class="dept-capsule-badge">STR</span>
+            <div class="dept-capsule-info"><strong>Strategy &amp; Planning</strong><span>8 specialists · strategy-001</span></div>
+          </a>
+          <a href="/organization" data-goto="organization" class="dept-capsule">
+            <span class="dept-capsule-badge">DAT</span>
+            <div class="dept-capsule-info"><strong>Data &amp; Analytics</strong><span>10 specialists · data-001</span></div>
+          </a>
+          <a href="/organization" data-goto="organization" class="dept-capsule">
+            <span class="dept-capsule-badge">OPS</span>
+            <div class="dept-capsule-info"><strong>Operations &amp; Delivery</strong><span>8 specialists · operations-001</span></div>
+          </a>
+          <a href="/organization" data-goto="organization" class="dept-capsule">
+            <span class="dept-capsule-badge">COM</span>
+            <div class="dept-capsule-info"><strong>Communications &amp; Docs</strong><span>6 specialists · communications-001</span></div>
+          </a>
+          <a href="/organization" data-goto="organization" class="dept-capsule">
+            <span class="dept-capsule-badge">TLS</span>
+            <div class="dept-capsule-info"><strong>Tools &amp; Infrastructure</strong><span>10 specialists · platform-001</span></div>
+          </a>
+          <a href="/organization" data-goto="organization" class="dept-capsule">
+            <span class="dept-capsule-badge">VER</span>
+            <div class="dept-capsule-info"><strong>Verification &amp; Evaluation</strong><span>16 specialists · assurance-001</span></div>
+          </a>
+          <a href="/organization" data-goto="organization" class="dept-capsule">
+            <span class="dept-capsule-badge">DIS</span>
+            <div class="dept-capsule-info"><strong>Distribution &amp; Intake</strong><span>8 specialists · distribution-001</span></div>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="panel workflow-panel">
+        <div class="mini-label">HOW WORK MOVES</div>
+        <h2>From intent to evidence.</h2>
+        <ol class="workflow">
+          <li><span>01</span><div><strong>Clarify the task</strong><p>Resolve the questions that matter.</p></div></li>
+          <li><span>02</span><div><strong>Bring in the right heads</strong><p>Departments propose useful work.</p></div></li>
+          <li><span>03</span><div><strong>Assign and execute</strong><p>Employees work within their roles.</p></div></li>
+          <li><span>04</span><div><strong>Review the evidence</strong><p>Independent checks precede acceptance.</p></div></li>
+        </ol>
+        <div class="readiness-box">
+          <strong id="model-status">Checking model configuration</strong>
+          <p id="model-description">Provider availability is checked locally.</p>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
+
 <section id="view-organization" class="view d-none">
-<div class="page-heading compact"><div><div class="eyebrow">THE ORGANIZATION</div><h1>Specialists, with a structure.</h1><p class="lead-copy">Explore departments, reporting lines, and every agent’s responsibilities.</p></div><span class="tag">101 identities · 10 departments</span></div>
-<div class="director-strip"><span class="agent-avatar director-avatar">MD</span><div><span class="mini-label">ORGANIZATION LEAD</span><h2>Mission Director</h2><p>Selects contributions, aligns heads, and owns the outcome.</p></div><button class="btn btn-outline-secondary" id="inspect-director">View role ↗</button></div>
-<div class="directory-toolbar"><label class="search-box"><span>⌕</span><input id="agent-search" class="form-control" type="search" placeholder="Search agents, roles, or departments" aria-label="Search organization"></label><span id="directory-count" class="text-secondary">10 departments</span></div>
-<div id="department-grid" class="department-grid"></div><div id="search-results" class="panel d-none"></div>
-<div id="agent-inspector" class="panel mt-4 d-none" tabindex="-1"></div>
-<details class="panel mt-4"><summary>Shared knowledge</summary><p class="small text-secondary mt-3">Add documents agents can search and read during their work. Retrieved text is sent to your configured model.</p><form id="knowledge-form"><label class="form-label" for="knowledge-file">UTF-8 document (TXT, MD, CSV or JSON, up to 64 KiB)</label><input class="form-control mb-3" id="knowledge-file" type="file" accept=".txt,.md,.csv,.json" required><button class="btn btn-outline-secondary" id="knowledge-upload">Add document</button></form><p id="knowledge-result" class="small mt-3" role="status"></p></details>
+  <div class="page-heading compact">
+    <div>
+      <div class="eyebrow">THE ORGANIZATION</div>
+      <h1>Specialists, with a structure.</h1>
+      <p class="lead-copy">Explore departments, reporting lines, and every agent’s responsibilities.</p>
+    </div>
+    <span class="tag">101 identities · 10 departments</span>
+  </div>
+  <div class="director-strip">
+    <span class="agent-avatar director-avatar">MD</span>
+    <div>
+      <span class="mini-label">ORGANIZATION LEAD</span>
+      <h2>Mission Director</h2>
+      <p>Selects contributions, aligns heads, and owns the outcome.</p>
+    </div>
+    <button class="btn btn-outline-secondary" id="inspect-director" type="button">View role ↗</button>
+  </div>
+  <div class="directory-toolbar">
+    <label class="search-box">
+      <span class="search-icon" aria-hidden="true">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      </span>
+      <input id="agent-search" class="form-control" type="search" placeholder="Search agents, roles, or departments" aria-label="Search organization">
+    </label>
+    <span id="directory-count" class="text-secondary">10 departments</span>
+  </div>
+  <div id="department-grid" class="department-grid"></div>
+  <div id="search-results" class="panel d-none"></div>
+  <div id="agent-inspector" class="panel mt-4 d-none" tabindex="-1"></div>
+  <details class="panel mt-4">
+    <summary>Shared knowledge</summary>
+    <p class="small text-secondary mt-3">Add documents agents can search and read during their work. Retrieved text is sent to your configured model.</p>
+    <form id="knowledge-form">
+      <label class="form-label" for="knowledge-file">UTF-8 document (TXT, MD, CSV or JSON, up to 64 KiB)</label>
+      <input class="form-control mb-3" id="knowledge-file" type="file" accept=".txt,.md,.csv,.json" required>
+      <button class="btn btn-outline-secondary" id="knowledge-upload" type="submit">Add document</button>
+    </form>
+    <p id="knowledge-result" class="small mt-3" role="status"></p>
+  </details>
 </section>
+
 <section id="view-chat" class="view d-none">
-<div class="chat-toolbar"><h1>Mission chat</h1><span id="chat-status" class="tag">Ready</span><button class="btn btn-outline-secondary new-mission">New chat</button></div>
-<div class="mission-chat-surface">
-<div class="chat-utilities"><details id="mission-details"><summary>Mission details</summary><div id="brief-title" class="mini-label"></div><div id="brief-content"></div></details><div id="mission-controls" class="d-none"><button class="btn btn-link btn-sm" id="pause-mission">Pause</button><button class="btn btn-link btn-sm d-none" id="resume-mission">Resume</button><button class="btn btn-link btn-sm" id="view-evidence">View activity</button></div></div>
-<div id="chat-thread" class="chat-thread"><div id="chat-messages" class="chat-messages" role="log" aria-label="Conversation" aria-live="polite"></div><div id="intervention-area"></div></div>
-<div class="chat-compose-dock"><div id="chat-progress" class="chat-progress d-none" role="status" aria-live="polite" aria-atomic="true"><span class="activity-dot" aria-hidden="true"></span><span id="chat-progress-label"></span></div>
-<form id="mission-form" class="composer"><label for="mission-input" class="visually-hidden">Message your organization</label><textarea id="mission-input" class="form-control" rows="1" maxlength="12000" placeholder="Message your organization..." required></textarea><div class="composer-actions"><details class="chat-limits"><summary>Task limits</summary><div class="row g-2 mt-1"><label class="col-6" for="budget-calls">Model calls<input id="budget-calls" class="form-control" type="number" min="1" max="160" value="160" required></label><label class="col-6" for="budget-tokens">Token budget<input id="budget-tokens" class="form-control" type="number" min="4096" max="2000000" value="2000000" required></label></div></details><button id="send-mission" class="btn btn-primary" type="submit">Send</button></div><small id="mode-description"></small></form></div>
-</div></section>
+  <h1 class="visually-hidden">Chat</h1>
+  <span id="chat-status" hidden>Ready</span>
+  <aside class="chat-workspace" aria-label="Chat files and activity">
+    <details id="chat-inspector">
+      <summary>
+        <span class="summary-icon" aria-hidden="true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+        </span>
+        <span>Files &amp; activity</span>
+        <span id="changes-summary" class="change-totals">+0 −0</span>
+      </summary>
+      <div class="workspace-content">
+        <div class="workspace-heading">
+          <strong id="workspace-title">New chat</strong>
+          <span id="workspace-state"></span>
+        </div>
+        <div class="workspace-section">
+          <div class="workspace-section-heading">
+            <h2>Files</h2>
+            <div class="workspace-actions">
+              <button id="preview-project" type="button" class="workspace-action" disabled>Preview ↗</button>
+              <button id="download-project" type="button" class="workspace-action" disabled>Download ZIP ↓</button>
+            </div>
+          </div>
+          <p id="workspace-counts" class="workspace-muted">Files appear as agents save them.</p>
+          <p id="preview-status" class="workspace-muted" role="status">No HTML page has been saved yet.</p>
+          <a id="preview-link" class="workspace-action d-none" target="_blank" rel="noopener noreferrer">Open website preview ↗</a>
+          <div id="workspace-files"></div>
+        </div>
+        <div class="workspace-section">
+          <h2>Activity</h2>
+          <div id="workspace-events" class="workspace-muted">No actions yet.</div>
+        </div>
+        <details class="workspace-section">
+          <summary>Plan and limits</summary>
+          <div id="brief-title" class="mini-label"></div>
+          <div id="brief-content"></div>
+          <div id="chat-limits-info"></div>
+          <div class="row g-2 mt-2">
+            <label class="col-6" for="budget-calls">Call cap<input id="budget-calls" class="form-control" type="number" min="1" max="160" value="160" required form="mission-form"></label>
+            <label class="col-6" for="budget-tokens">Admission units<input id="budget-tokens" class="form-control" type="number" min="4096" max="10000000" value="10000000" required form="mission-form"></label>
+          </div>
+        </details>
+        <details id="workspace-failure-details" class="workspace-section">
+          <summary>Failure details</summary>
+          <div id="workspace-failures"></div>
+        </details>
+        <div id="mission-controls" class="workspace-controls d-none">
+          <button class="workspace-action" id="pause-mission" type="button">Pause</button>
+          <button class="workspace-action d-none" id="resume-mission" type="button">Resume</button>
+          <button class="workspace-action" id="view-evidence" type="button">Full activity ↗</button>
+        </div>
+      </div>
+    </details>
+  </aside>
+  <div class="mission-chat-surface">
+    <div id="chat-thread" class="chat-thread">
+      <div id="chat-messages" class="chat-messages" role="log" aria-label="Conversation" aria-live="polite"></div>
+      <div id="intervention-area"></div>
+    </div>
+    <div class="chat-compose-dock">
+      <div id="chat-progress" class="chat-progress d-none" role="status" aria-live="polite" aria-atomic="true">
+        <span class="activity-orbit" aria-hidden="true">✳</span>
+        <span id="chat-progress-label"></span>
+        <time id="chat-progress-time" aria-live="off"></time>
+      </div>
+      <form id="mission-form" class="composer">
+        <label for="mission-input" class="visually-hidden">Message your organization</label>
+        <textarea id="mission-input" class="form-control" rows="1" maxlength="12000" placeholder="Message your organization..." required></textarea>
+        <div class="composer-actions">
+          <span class="composer-hint">Enter to send · Shift + Enter for a new line</span>
+          <button id="send-mission" class="btn btn-primary" type="submit" aria-label="Send message">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+        </div>
+        <small id="mode-description" class="visually-hidden"></small>
+      </form>
+    </div>
+  </div>
+</section>
+
+<dialog id="file-viewer" class="file-viewer">
+  <div class="file-viewer-heading">
+    <strong id="file-viewer-title"></strong>
+    <button id="preview-file" class="workspace-action" type="button" hidden>Preview ↗</button>
+    <button id="download-file" class="workspace-action" type="button">Download file</button>
+    <button id="close-file" class="workspace-action" type="button" aria-label="Close source file">✕</button>
+  </div>
+  <div id="file-tabs" class="file-tabs" role="tablist" aria-label="File view" hidden>
+    <button id="file-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="file-preview">Preview</button>
+    <button id="file-source-tab" type="button" role="tab" aria-selected="false" aria-controls="file-source" tabindex="-1">Source</button>
+  </div>
+  <article id="file-preview" class="file-document markdown-body" role="tabpanel" aria-labelledby="file-preview-tab" tabindex="0" hidden></article>
+  <pre id="file-source" role="tabpanel" aria-label="Source" tabindex="0"></pre>
+</dialog>
+
 <section id="view-connectors" class="view d-none">
-<div class="page-heading compact"><div><div class="eyebrow">TOOLS &amp; CONNECTIONS</div><h1>Connect your organization's tools.</h1><p class="lead-copy">One connection for all 101 agents. Each agent uses the tools its work needs.</p></div><span class="tag">Shared across the organization</span></div>
-<div class="connector-toolbar"><label class="search-box"><span aria-hidden="true">&#8981;</span><input id="connector-search" class="form-control" type="search" placeholder="Search connectors" aria-label="Search connectors"></label><div class="connector-filters" role="group" aria-label="Filter connectors"><button type="button" class="btn active" data-connector-filter="all" aria-pressed="true">All connectors</button><button type="button" class="btn" data-connector-filter="available" aria-pressed="false">Available now</button><button type="button" class="btn" data-connector-filter="soon" aria-pressed="false">Coming soon</button></div></div>
-<div id="connector-catalog" class="connector-catalog" aria-label="Connector catalog"></div><p id="connector-empty" class="empty-state d-none" role="status">No connectors match your search. Try another name.</p>
-<p class="connector-note">Coming soon connectors are previews. They cannot access your accounts yet.</p>
-<section id="connector-setup" class="panel connector-setup d-none" aria-labelledby="connector-setup-title">
-<div class="section-heading"><h2 id="connector-setup-title">Set up a connection</h2><button class="btn btn-outline-secondary btn-sm" type="button" id="close-connector">Close setup</button></div>
-<form id="connector-form"><input id="connector-id" type="hidden"><input id="connector-kind" type="hidden">
-<div class="row g-3"><div class="col-md-6"><label class="form-label" for="connector-name">Connection name</label><input id="connector-name" class="form-control" maxlength="100" required></div>
-<div id="connector-url-field" class="col-md-6"><label class="form-label" for="connector-url">Endpoint URL</label><input id="connector-url" class="form-control" type="url" maxlength="2000"></div>
-<div id="connector-model-field" class="col-md-6"><label class="form-label" for="connector-model">Model name (optional)</label><input id="connector-model" class="form-control" maxlength="200" placeholder="Use configured default"></div>
-<div class="col-md-6"><label class="form-label" for="connector-secret">API key / bearer token</label><input id="connector-secret" class="form-control" type="password" autocomplete="new-password" maxlength="4096"></div></div>
-<p class="small text-secondary mt-3">Stored encrypted for your Windows user. Leave blank to keep a saved credential.</p>
-<label id="connector-local-field" class="d-none mb-3"><input id="connector-local" type="checkbox"> Allow an explicitly configured localhost MCP server</label>
-<p id="connector-kind-help" class="small text-secondary"></p><button class="btn btn-primary" type="submit" id="save-connector">Save connection</button>
-</form></section>
-<section class="connector-connections" aria-labelledby="saved-connectors-title"><div class="section-heading"><h2 id="saved-connectors-title">Your connections</h2><span class="small text-secondary">Available to all agents when enabled</span></div><div id="connector-list" aria-live="polite"><p class="text-secondary">Loading connections...</p></div></section>
-<details class="connector-note"><summary>How tools are used</summary><p class="mt-2">With a live model, agents can work from their roles, your context and approved local knowledge even when no external tools are connected. Enabled tools are shared across the organization; agents use them within the current mission and task permissions.</p><p>Custom MCP supports remote HTTP servers and selected read-only tools. OAuth sign-in, local command servers and write tools are not available yet. Connect only servers you trust.</p></details>
+  <div class="page-heading compact">
+    <div>
+      <div class="eyebrow">TOOLS &amp; CONNECTIONS</div>
+      <h1>Connect your organization's tools.</h1>
+      <p class="lead-copy">One connection for all 101 agents. Each agent uses the tools its work needs.</p>
+    </div>
+    <span class="tag">Shared across the organization</span>
+  </div>
+  <div class="connector-toolbar">
+    <label class="search-box">
+      <span class="search-icon" aria-hidden="true">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      </span>
+      <input id="connector-search" class="form-control" type="search" placeholder="Search connectors" aria-label="Search connectors">
+    </label>
+    <div class="connector-filters" role="group" aria-label="Filter connectors">
+      <button type="button" class="btn active" data-connector-filter="all" aria-pressed="true">All connectors</button>
+      <button type="button" class="btn" data-connector-filter="available" aria-pressed="false">Available now</button>
+      <button type="button" class="btn" data-connector-filter="soon" aria-pressed="false">Coming soon</button>
+    </div>
+  </div>
+  <section id="model-configuration" class="panel mb-4" aria-label="Model configuration">
+    <h2>Model configuration</h2>
+    <p>Loading configuration...</p>
+  </section>
+  <div id="connector-catalog" class="connector-catalog" aria-label="Connector catalog"></div>
+  <p id="connector-empty" class="empty-state d-none" role="status">No connectors match your search. Try another name.</p>
+  <p class="connector-note">Coming soon connectors are previews. They cannot access your accounts yet.</p>
+  <section id="connector-setup" class="panel connector-setup d-none" aria-labelledby="connector-setup-title">
+    <div class="section-heading">
+      <h2 id="connector-setup-title">Set up a connection</h2>
+      <button class="btn btn-outline-secondary btn-sm" type="button" id="close-connector">Close setup</button>
+    </div>
+    <form id="connector-form">
+      <input id="connector-id" type="hidden">
+      <input id="connector-kind" type="hidden">
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label" for="connector-name">Connection name</label><input id="connector-name" class="form-control" maxlength="100" required></div>
+        <div id="connector-url-field" class="col-md-6"><label class="form-label" for="connector-url">Endpoint URL</label><input id="connector-url" class="form-control" type="url" maxlength="2000"></div>
+        <div id="connector-model-field" class="col-md-6"><label class="form-label" for="connector-model">Model name (optional)</label><input id="connector-model" class="form-control" maxlength="200" placeholder="Use configured default"></div>
+        <div class="col-md-6"><label class="form-label" for="connector-secret">API key / bearer token</label><input id="connector-secret" class="form-control" type="password" autocomplete="new-password" maxlength="4096"></div>
+      </div>
+      <p class="small text-secondary mt-3">Stored encrypted for your Windows user. Leave blank to keep a saved credential.</p>
+      <details id="connector-model-limits" class="mb-3">
+        <summary>Model request limits</summary>
+        <div class="row g-3 mt-1">
+          <div class="col-md-6"><label class="form-label" for="connector-max-output">Generation token cap</label><input id="connector-max-output" class="form-control" type="number" min="1024" max="32768" step="1" placeholder="32768"></div>
+          <div class="col-md-6"><label class="form-label" for="connector-timeout">Work request timeout (seconds)</label><input id="connector-timeout" class="form-control" type="number" min="10" max="300" step="1" placeholder="120"></div>
+        </div>
+        <label class="form-label mt-3" for="connector-temperature">Temperature (optional, 0–2)</label>
+        <input id="connector-temperature" class="form-control" type="number" min="0" max="2" step="0.1" placeholder="1.0">
+        <p class="small text-secondary mt-2">Includes reasoning tokens. Leave blank to use server environment settings or defaults. Retries stay within shared mission budgets; connection retries may extend the timeout up to 300 seconds.</p>
+      </details>
+      <label id="connector-local-field" class="d-none mb-3"><input id="connector-local" type="checkbox"> Allow an explicitly configured localhost MCP server</label>
+      <p id="connector-kind-help" class="small text-secondary"></p>
+      <button class="btn btn-primary" type="submit" id="save-connector">Save connection</button>
+    </form>
+  </section>
+  <section class="connector-connections" aria-labelledby="saved-connectors-title">
+    <div class="section-heading">
+      <h2 id="saved-connectors-title">Your connections</h2>
+      <span class="small text-secondary">Available to all agents when enabled</span>
+    </div>
+    <div id="connector-list" aria-live="polite"><p class="text-secondary">Loading connections...</p></div>
+  </section>
+  <details class="connector-note">
+    <summary>How tools are used</summary>
+    <p class="mt-2">With a live model, agents can work from their roles, your context and approved local knowledge even when no external tools are connected. Enabled tools are shared across the organization; agents use them within the current mission and task permissions.</p>
+    <p>Custom MCP supports remote HTTP servers and selected read-only tools. OAuth sign-in, local command servers and write tools are not available yet. Connect only servers you trust.</p>
+  </details>
 </section>
+
 <section id="view-activity" class="view d-none">
-<div class="page-heading compact"><div><div class="eyebrow">OBSERVABILITY</div><h1>See what actually happened.</h1><p class="lead-copy">Recorded actions, leadership handoffs, artifacts, and execution evidence.</p></div><span id="activity-mode" class="tag">No mission selected</span></div>
-<div class="activity-toolbar"><label for="activity-mission">Mission</label><select id="activity-mission" class="form-select"><option value="">Select a mission</option></select><label for="activity-agent" class="visually-hidden">Agent</label><select id="activity-agent" class="form-select"><option value="">All agents</option></select><label for="activity-filter" class="visually-hidden">Filter activity</label><select id="activity-filter" class="form-select"><option value="calls">Agent actions</option><option value="messages">Leadership handoffs</option><option value="artifacts">Artifacts</option><option value="executions">Sandbox checks</option><option value="tools">Tool requests &amp; results</option></select></div>
-<div id="activity-summary" class="activity-summary"></div><div id="activity-content" class="panel empty-state"><h2>No activity to inspect yet.</h2><p>Start a mission or choose one from your history.</p></div>
+  <div class="page-heading compact">
+    <div>
+      <div class="eyebrow">OBSERVABILITY</div>
+      <h1>See what actually happened.</h1>
+      <p class="lead-copy">Recorded actions, leadership handoffs, artifacts, and execution evidence.</p>
+    </div>
+    <span id="activity-mode" class="tag">No chat selected</span>
+  </div>
+  <div class="activity-toolbar">
+    <label for="activity-mission">Chat</label>
+    <select id="activity-mission" class="form-select"><option value="">Select a chat</option></select>
+    <label for="activity-agent" class="visually-hidden">Agent</label>
+    <select id="activity-agent" class="form-select"><option value="">All agents</option></select>
+    <label for="activity-filter" class="visually-hidden">Filter activity</label>
+    <select id="activity-filter" class="form-select">
+      <option value="calls">Agent actions</option>
+      <option value="messages">Leadership handoffs</option>
+      <option value="artifacts">Artifacts</option>
+      <option value="executions">Sandbox checks</option>
+      <option value="tools">Tool requests &amp; results</option>
+    </select>
+  </div>
+  <div id="activity-summary" class="activity-summary"></div>
+  <div id="activity-content" class="panel empty-state">
+    <h2>No activity to inspect yet.</h2>
+    <p>Start a chat or choose one from your history.</p>
+  </div>
 </section>
-<footer>COLLECTIVE 101 <span>Clarity in the mission. Evidence in the result.</span></footer>
-</main></div></div>
-</body></html>
+
+<footer>COLLECTIVE 101 <span>Clarity in the work. Evidence in the result.</span></footer>
+<section id="view-evaluations" class="view d-none" aria-labelledby="evaluations-heading">
+  <div class="section-heading"><div><span class="eyebrow">MEASURED WORK</span><h1 id="evaluations-heading">Effectiveness</h1><p class="text-secondary">Judge agents by the work they can demonstrate. A role is not a score.</p></div></div>
+  <div id="evaluation-notice" class="alert alert-light" role="status">Loading evaluation evidence…</div>
+  <div class="evaluation-layout"><div class="evaluation-main">
+    <section class="panel"><div class="evaluation-heading"><h2>Agent scorecards</h2><label class="visually-hidden" for="evaluation-search">Search agents</label><input id="evaluation-search" class="form-control" type="search" placeholder="Find an agent or department"></div><p class="small text-secondary">Scores apply to the recorded model, role version and benchmark cases. Unreviewed work and fixtures never establish effectiveness.</p><details class="small text-secondary mb-3"><summary>How scores are decided</summary><p id="evaluation-policy" class="mt-2"></p></details><div class="evaluation-table-wrap"><table class="table align-middle"><thead><tr><th scope="col">Agent</th><th scope="col">Evidence</th><th scope="col">Verdict</th></tr></thead><tbody id="evaluation-agents"></tbody></table></div></section>
+    <section class="panel mt-4"><div class="evaluation-heading"><h2>Evaluation runs</h2><button id="refresh-evaluations" class="btn btn-outline-secondary btn-sm" type="button">Refresh</button></div><div id="evaluation-runs"></div><div id="evaluation-detail" class="mt-3"></div></section>
+    <section class="panel mt-4" id="memory-panel"><h2>Reviewed memory &amp; improvement</h2><p class="text-secondary small">Compare memory on and off using the same cases. Improvements require held-out evidence; model weights are unchanged.</p><div id="memory-evidence"></div><details><summary>Propose a lesson from recorded work</summary><form id="lesson-form" class="mt-3"><label for="lesson-run" class="form-label">Source run ID from Activity</label><input id="lesson-run" class="form-control" required maxlength="80"><label for="lesson-agent" class="form-label mt-2">Agent ID that produced the evidence</label><input id="lesson-agent" class="form-control" required maxlength="80"><label for="lesson-situation" class="form-label mt-2">Situation</label><textarea id="lesson-situation" class="form-control" required maxlength="2000" rows="2"></textarea><label for="lesson-action" class="form-label mt-2">Action or proposed playbook</label><textarea id="lesson-action" class="form-control" required maxlength="2000" rows="2"></textarea><label for="lesson-outcome" class="form-label mt-2">Observed outcome</label><textarea id="lesson-outcome" class="form-control" required maxlength="2000" rows="2"></textarea><label for="lesson-limitations" class="form-label mt-2">Limitations</label><textarea id="lesson-limitations" class="form-control" required maxlength="2000" rows="2"></textarea><button type="submit" class="btn btn-outline-secondary mt-3">Save for review</button></form></details></section>
+  </div><aside class="panel evaluation-controls" aria-labelledby="evaluation-run-heading"><h2 id="evaluation-run-heading">Run a benchmark</h2><p class="small text-secondary">Live runs use model credits in disposable evaluation state. Existing chats are not replayed.</p>
+    <form id="evaluation-form"><fieldset><legend>Cases and success criteria</legend><div id="evaluation-cases"></div></fieldset>
+    <fieldset class="mt-3"><legend>Compare</legend><label class="evaluation-check"><input type="checkbox" name="evaluation-mode" value="specialist" checked> Role specialist</label><label class="evaluation-check"><input type="checkbox" name="evaluation-mode" value="generalist"> Generalist</label><label class="evaluation-check"><input type="checkbox" name="evaluation-mode" value="organization"> Departmental team (addition case only)</label><label class="evaluation-check"><input type="checkbox" name="evaluation-mode" value="memory_off"> Memory off</label><label class="evaluation-check"><input type="checkbox" name="evaluation-mode" value="memory_on"> Memory on</label></fieldset>
+    <div class="row g-2 mt-2"><div class="col-6"><label for="evaluation-trials" class="form-label">Trials per case</label><input id="evaluation-trials" type="number" min="1" max="3" value="1" class="form-control" required></div><div class="col-6"><label for="evaluation-calls" class="form-label">API call cap</label><input id="evaluation-calls" type="number" min="1" max="160" value="80" class="form-control" required></div></div>
+    <label class="evaluation-check mt-3"><input id="evaluation-confirm" type="checkbox" required> I understand this uses live API credits.</label><p id="evaluation-model" class="small text-secondary"></p><button id="start-evaluation" class="btn btn-primary w-100 mt-2" type="submit">Run live evaluation</button></form>
+  </aside></div>
+</section>
+</main>
+</div>
+</div>
+</body>
+</html>

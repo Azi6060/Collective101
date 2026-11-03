@@ -13,6 +13,7 @@ from . import repairs
 from . import learning
 from .agent_tools import SCHEMA as TOOL_SCHEMA, ToolBroker, eligible_tools
 from .connectors import ConnectorManager
+from .runtime_core import POLICY_SCHEMA,policy,run_dag,validate_concurrency
 
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS org_interventions(
@@ -48,13 +49,18 @@ CREATE TABLE IF NOT EXISTS org_experience(
 
 
 class DepartmentOrganization:
-    def __init__(self, db_path, provider):
+    def __init__(self, db_path, provider,concurrency=1,memory_enabled=True):
+        self.concurrency=validate_concurrency(concurrency)
+        if type(memory_enabled) is not bool:raise ValueError('memory_enabled must be boolean')
+        self.memory_enabled=memory_enabled
+        self.roster = {a['id']:a for a in build_roster()}
         self.db_path=Path(db_path)
         self.store = Store(Path(db_path))
         with self.store.transaction() as db:
-            db.executescript(SCHEMA + budgets.SCHEMA + TOOL_SCHEMA + progress.SCHEMA + repairs.SCHEMA + learning.SCHEMA)
+            db.executescript(SCHEMA + budgets.SCHEMA + TOOL_SCHEMA + progress.SCHEMA + repairs.SCHEMA + learning.SCHEMA+POLICY_SCHEMA)
+            from .model_requests import ensure_columns
+            ensure_columns(db,'org_calls')
         self.provider = provider
-        self.roster = {a['id']:a for a in build_roster()}
 
     @property
     def provider_signature(self):
@@ -64,7 +70,7 @@ class DepartmentOrganization:
     def close(self):
         self.store.close()
 
-    def create(self, mission, max_calls=160, max_tokens=2000000, budget_id=None):
+    def create(self, mission, max_calls=160, max_tokens=budgets.MAX_ADMISSION_UNITS, budget_id=None):
         mission = contracts.mission_contract(mission)
         if type(max_calls) is not int or not 1 <= max_calls <= 1000:
             raise ValueError('max_calls must be 1 to 1000')
@@ -74,6 +80,7 @@ class DepartmentOrganization:
         budget_id = budget_id or run_id
         budgets.create_budget(self.store,budget_id,min(max_calls,160),max_tokens)
         self.store.execute('INSERT INTO org_run_budgets VALUES(?,?)',(run_id,budget_id))
+        self.store.execute('INSERT INTO org_execution_policy VALUES(?,?,?)',(run_id,self.concurrency,int(self.memory_enabled)))
         ConnectorManager(self.store,self.roster).bind(run_id,mission['allowed_capabilities'])
         return run_id
 
@@ -96,6 +103,7 @@ class DepartmentOrganization:
         if run['status'] == 'reviewed':
             return run
         self.roster = run['roster']  # Frozen definitions keep historical work reproducible.
+        frozen_policy=policy(self.store,run_id);self.concurrency=frozen_policy['concurrency'];self.memory_enabled=bool(frozen_policy['memory_enabled'])
         self.harness = AgentHarness(self.store, self.provider, self.roster)
         self.bus = LeadershipBus(self.store, self.roster)
         self.store.execute("UPDATE org_runs SET status='running',error=NULL WHERE id=?", (run_id,))
@@ -112,11 +120,24 @@ class DepartmentOrganization:
         return self.inspect(run_id)
 
     def _employees(self, department):
-        return [{**{k:a[k] for k in ('id','name','role','skills','responsibilities')},'responsibility_evidence':learning.responsibility(self.store,a['id'],self.provider_signature),'eligible_tools':[t['name'] for t in ToolBroker(self.store,self.roster).catalog(a['id']) if t['available']]}
+        broker=ToolBroker(self.store,self.roster)
+        return [{**{k:a[k] for k in ('id','name','role','skills','responsibilities')},'responsibility_evidence':learning.responsibility(self.store,a['id'],self.provider_signature),'eligible_tools':[t['name'] for t in broker.catalog(a['id']) if t['available']]}
                 for a in self.roster.values() if a['department'] == department and a['role'] != 'department_lead']
 
     def _cycle(self, run_id, mission):
         call = lambda key, aid, phase, ctx, validator: self.harness.invoke(run_id,key,aid,phase,{'mission':mission,**ctx},validator)
+        def validate_proposal(value,department):
+            result=contracts.proposal(value,department,self.roster)
+            assigned={department+'/'+path for task in result['tasks'] for path in task['outputs']}
+            required={d['path'] for d in mission.get('deliverables',[]) if d['path'].startswith(department+'/')}
+            if required-assigned:raise ValueError('Head must assign declared source deliverables: '+', '.join(sorted(required-assigned))+
+                '. Assigned paths: '+(', '.join(sorted(assigned)) or '(none)')+'. task.outputs must use department-relative paths, e.g. index.html for engineering/index.html.')
+            return result
+        def validate_selection(value,proposals):
+            result=contracts.selection(value,proposals)
+            owners={d['path'].split('/')[0] for d in mission.get('deliverables',[])}
+            if owners-set(result['departments']):raise ValueError('Director must include declared delivery owners: '+', '.join(sorted(owners-set(result['departments']))))
+            return result
         send = lambda key, sender, recipient, kind, data: self.bus.send(run_id,key,sender,recipient,kind,data)
         proposals = {}
         queue = list(mission.get('departments', DEPARTMENT_MAP))
@@ -127,10 +148,11 @@ class DepartmentOrganization:
             head = department+'-001'
             send('brief:'+department,'director-001',head,'mission.brief',mission)
             context = {'department':department, 'employees':self._employees(department),
+                       'required_outputs':[d['path'].removeprefix(department+'/') for d in mission.get('deliverables',[]) if d['path'].startswith(department+'/')],
                        'available_capabilities':mission['allowed_capabilities'],'tool_catalog':ToolBroker(self.store,self.roster).catalog(),
-                       'instruction':'Ask what useful contribution this department can make. You may decline. Assign at most six tasks to appropriate employees. Assign optional tools in each task tools list only when useful; requires lists essential capabilities. Match tools to the employee eligible_tools and mission permissions. Request missing capabilities honestly.'}
+                       'instruction':'Ask what useful contribution this department can make. You may decline unless you own a declared deliverable. Prefer one to three concrete tasks; at most six for complex work. Prioritize implementing declared source and integrating content over writing supporting plans or internal review documents. draft_artifact is a built-in JSON file-output capability, not an available_tools entry; no external tool is required for it. Assign optional tools in each task tools list only when useful; requires lists essential capabilities. Match tools to the employee eligible_tools and mission permissions. Request missing capabilities honestly.'}
             proposals[department] = call('assess:'+department,head,'assess',context,
-                lambda v,d=department: contracts.proposal(v,d,self.roster))
+                lambda v,d=department: validate_proposal(v,d))
             send('proposal:'+department,head,'director-001','department.proposal',proposals[department])
             queue.extend(d for d in proposals[department]['depends_on'] if d not in proposals)
         # An explicit head-to-head council: each receives only leadership-authored proposals.
@@ -142,75 +164,32 @@ class DepartmentOrganization:
                 send('council:'+peer+':'+department,peer+'-001',head,'council.proposal',content)
             proposals[department] = call('coordinate:'+department,head,'coordinate',{
                 'department':department,'employees':self._employees(department),'own_proposal':initial[department],
+                'required_outputs':[d['path'].removeprefix(department+'/') for d in mission.get('deliverables',[]) if d['path'].startswith(department+'/')],
                 'head_proposals':peers,'instruction':'Revise or retain your proposal after discussing other heads proposals. Remove duplicated work. Declare department dependencies and use your own employees only. Decline if unnecessary.'},
-                lambda v,d=department: contracts.proposal(v,d,self.roster))
+                lambda v,d=department: validate_proposal(v,d))
             if set(proposals[department]['depends_on']) - set(initial):
                 raise ValueError('Council requested an unconsulted department; revise the mission shortlist')
             send('coordinated:'+department,head,'director-001','department.coordinated',proposals[department])
         chosen = call('select','director-001','select',{'proposals':proposals,
             'instruction':'Select a coherent useful subset. Include every transitive department dependency; do not select a declined department. Verification will happen independently even if assurance does not propose deliverables.'},
-            lambda v: contracts.selection(v,proposals))
+            lambda v: validate_selection(v,proposals))
         order = contracts.topological({d:proposals[d]['depends_on'] for d in chosen['departments']})
-        reports, blockers, workers = {}, [], set()
+        reports,blockers,workers=self._execute_team(run_id,mission,order,proposals,chosen,call,send)
+        # One final leadership pass can resolve a concern that was true when an
+        # upstream report was written but fulfilled by later departments.
         for department in order:
-            head = department+'-001'
-            spec = proposals[department]
-            send('selected:'+department,'director-001',head,'department.selected',{'reason':chosen['reason'],'proposal':spec})
-            upstream = {d:reports[d] for d in spec['depends_on']}
-            for peer, content in upstream.items():
-                send('handoff:'+peer+':'+department,peer+'-001',head,'department.handoff',content)
-            outcomes, department_artifacts = {}, []
-            tasks = {t['key']:t for t in spec['tasks']}
-            for key in contracts.topological({k:t['depends_on'] for k,t in tasks.items()}):
-                task = tasks[key]
-                agent_id = task['assignee']
-                dependencies = {k:outcomes[k] for k in task['depends_on']}
-                briefing = {'task':task,'head_briefing':upstream,'own_dependencies':dependencies}
-                send('assignment:'+department+':'+key,head,agent_id,'task.assignment',briefing)
-                missing = sorted(set(task['requires']) - set(mission['allowed_capabilities']))
-                broker=ToolBroker(self.store,self.roster)
-                ready={item['name'] for item in broker.catalog(agent_id) if item['available']}
-                missing += sorted(set(task['requires']) - {'draft_artifact'} - ready)
-                failed_dependencies = any(v['status'] == 'blocked' for v in dependencies.values()) or any(reports[d]['blockers'] for d in spec['depends_on'])
-                if missing or failed_dependencies:
-                    outcome = {'status':'blocked','summary':'Missing permitted capability or blocked dependency',
-                        'limitations':missing or ['Dependency is blocked'], 'capability_requests':missing,'artifacts':[]}
-                else:
-                    workers.add(agent_id)
-                    outcome = call('work:'+department+':'+key,agent_id,'work',briefing,
-                        lambda v,t=task: contracts.worker_result(v,t))
-                evidence=self.store.query("SELECT name,arguments,result,created_at FROM org_tool_calls WHERE run_id=? AND substr(call_key,1,?)=? ORDER BY rowid",(run_id,len('work:'+department+':'+key+':tool:'),'work:'+department+':'+key+':tool:'))
-                for item in evidence:
-                    item['arguments']=json.loads(item['arguments']); item['result']=json.loads(item['result'])
-                observed={item['name'] for item in evidence if item['result']['status']=='ok'}
-                unobserved=set(task['requires'])-{'draft_artifact'}-observed
-                if outcome['status']=='produced' and unobserved:
-                    outcome={'status':'blocked','summary':'Required tool evidence is missing','limitations':sorted(unobserved),'capability_requests':sorted(unobserved),'artifacts':[]}
-                unavailable=[item['name']+': '+item['result']['status'] for item in evidence if item['result']['status'] not in {'ok','needs_input'} and item['name'] not in observed]
-                outcome={**outcome,'limitations':list(dict.fromkeys(outcome['limitations']+unavailable)),'tool_evidence':evidence}
-                outcomes[key] = outcome
-                send('result:'+department+':'+key,agent_id,head,'task.result',outcome)
-                if outcome['status'] == 'blocked':
-                    blockers.append({'department':department,'task':key,'reason':outcome['summary'],
-                                     'capability_requests':outcome['capability_requests']})
-                for artifact in outcome['artifacts']:
-                    path = department+'/'+artifact['path']
-                    aid = department+':'+key+':'+artifact['path']
-                    payload = (run_id,aid,agent_id,key,path,artifact['content'],hashlib.sha256(artifact['content'].encode()).hexdigest())
-                    self.store.execute('INSERT OR IGNORE INTO org_artifacts VALUES(?,?,?,?,?,?,?)',payload)
-                    department_artifacts.append(aid)
-            head_report = call('report:'+department,head,'report',{'department':department,
-                'employee_results':outcomes, 'artifact_ids':department_artifacts,
-                'instruction':'Collect every employee result, report actual progress, blockers and bounded improvements. Reference only supplied artifact IDs. Do not conceal failed tasks.'},
-                lambda v: contracts.report(v,department_artifacts))
-            # Runtime blockers cannot be erased by a positive narrative.
-            head_report = {**head_report,'tool_evidence':[e for v in outcomes.values() for e in v.get('tool_evidence',[])],'blockers':head_report['blockers'] + [b['task']+': '+b['reason'] for b in blockers if b['department']==department],
-                           'published_artifacts':self.store.query('SELECT id,path,content,sha256 FROM org_artifacts WHERE run_id=? AND path LIKE ? ORDER BY id',(run_id,department+'/%'))}
-            reports[department] = head_report
-            send('report:'+department,head,'director-001','department.report',head_report)
-            for peer in order:
-                if peer != department:
-                    send('progress:'+department+':'+peer,head,peer+'-001','department.progress',head_report)
+            if not reports[department]['blockers'] or any(b['department']==department for b in blockers):continue
+            peers={d:r for d,r in reports.items() if d!=department}
+            head=department+'-001';previous=reports[department]
+            for peer,content in peers.items():send('integration-handoff:'+peer+':'+department,peer+'-001',head,'integration.handoff',content)
+            employee_results={r['message_key'].split(':',2)[-1]:json.loads(r['content']) for r in self.store.query("SELECT message_key,content FROM org_messages WHERE run_id=? AND recipient=? AND kind='task.result' ORDER BY rowid",(run_id,head))}
+            final_report=call('final_report:'+department,head,'report',{'department':department,'integration_review':True,
+                'employee_results':employee_results,'artifact_ids':previous['artifact_ids'],
+                'saved_files':previous['published_artifacts'],'previous_report':previous,'head_reports':peers,
+                'instruction':'All selected departments have finished this attempt. Reassess only your earlier integration concerns against the actual saved peer files and original acceptance criteria. Clear waiting-for-copy/source concerns if fulfilled. Retain real unresolved original requirements. Do not invent extra requirements or claim unexecuted browser tests; optional unavailable tools are disclosed limitations. You cannot erase runtime task failures or missing permissions.'},
+                lambda v,refs=previous['artifact_ids']:contracts.report(v,refs))
+            reports[department]={**previous,**final_report,'integration_checked':True}
+            send('integration-report:'+department,head,'director-001','department.final_report',reports[department])
         execution_results = self._execute_checks(run_id, mission)
         # Heads supply artifacts; the independent reviewer never bypasses its head.
         review_head = 'assurance-001'
@@ -227,7 +206,7 @@ class DepartmentOrganization:
         reviewer = assignment['reviewer_id']
         send('review-assignment',review_head,reviewer,'review.assignment',{'head_reports':reports,'acceptance_criteria':mission['acceptance_criteria']})
         verdict = call('review',reviewer,'review',{'head_reports':reports,'execution_evidence':execution_results,
-            'instruction':'Inspect observed execution evidence where provided. Independently inspect artifacts against every original criterion. Only recorded sandbox checks count as execution; deployment and external verification are unavailable. Give a reason and evidence for every criterion.'},
+            'instruction':'Inspect observed execution evidence where provided. Independently inspect saved artifacts against every original criterion; do not invent extra acceptance requirements. Only recorded sandbox checks count as execution; deployment and external verification are unavailable. A missing optional browser or hosting tool is a disclosed limitation, not proof that no source file exists. Give a reason and evidence for every original criterion.'},
             lambda v: contracts.review(v,mission['acceptance_criteria']))
         send('review-result',reviewer,review_head,'review.result',verdict)
         send('review-director',review_head,'director-001','verification.report',verdict)
@@ -238,7 +217,7 @@ class DepartmentOrganization:
             check_errors.append('Department heads reported unresolved blockers')
         retrospective = call('retrospective','director-001','retrospective',{
             'head_reports':reports,'independent_review':verdict,'runtime_check_errors':check_errors,'blocked_tasks':blockers,
-            'instruction':'Integrate the evidence and propose bounded, measurable organizational improvements. These are hypotheses, not permission, promotion, or automatic self-modification.'},contracts.retrospective)
+            'instruction':'Integrate the evidence and propose bounded, measurable organizational improvements. These are hypotheses, not permission, promotion, or automatic self-modification. Also return user_summary: a short, friendly reply to the user in plain language. Describe what was built, useful features, important limitations and any next action (such as replacing placeholder contact details). Do not include hashes, internal task IDs, Integrated outcome wording, department audit prose or acceptance-criterion counts in user_summary; keep technical evidence in summary and reports. Be candid when incomplete. Source inspection is not browser verification; never imply that preview, deployment, a backend or browser tests occurred without recorded evidence. Saved files and Preview are available through Files & activity when HTML exists.'},contracts.retrospective)
         for index, improvement in enumerate(retrospective['improvements']):
             send('improvement:'+str(index),'director-001',improvement['department']+'-001','improvement.proposed',improvement)
         return {'accepted':verdict['accepted'] and not blockers and not check_errors and bool(artifacts),
@@ -247,6 +226,77 @@ class DepartmentOrganization:
             'consulted_departments':list(proposals),'selected_departments':chosen['departments'],'proposals':proposals,'reports':reports,
             'blocked_tasks':blockers,'reviewer':reviewer,'review':verdict,'check_errors':check_errors,
             'retrospective':retrospective,'artifact_count':len(artifacts)}
+
+    def _execute_team(self,run_id,mission,order,proposals,chosen,call,send):
+        jobs={};dependencies={}
+        def begin(department,done):
+            head=department+'-001';spec=proposals[department]
+            send('selected:'+department,'director-001',head,'department.selected',{'reason':chosen['reason'],'proposal':spec})
+            upstream={d:done['report:'+d] for d in spec['depends_on']}
+            for peer,content in upstream.items():send('handoff:'+peer+':'+department,peer+'-001',head,'department.handoff',content)
+            return upstream
+        def work(department,task,done):
+            head=department+'-001';agent_id=task['assignee'];key=task['key']
+            upstream=done['begin:'+department]
+            own={k:done['task:'+department+':'+k]['outcome'] for k in task['depends_on']}
+            briefing={'task':task,'head_briefing':upstream,'own_dependencies':own}
+            send('assignment:'+department+':'+key,head,agent_id,'task.assignment',briefing)
+            broker=ToolBroker(self.store,self.roster)
+            ready={item['name'] for item in broker.catalog(agent_id) if item['available']}
+            missing=sorted(set(task['requires'])-set(mission['allowed_capabilities']))+sorted(set(task['requires'])-{'draft_artifact'}-ready)
+            failed=any(v['status']=='blocked' for v in own.values());worker=None
+            if missing or failed:
+                reason='Required capabilities unavailable: '+', '.join(missing) if missing else 'Required task dependencies blocked: '+', '.join(k for k,v in own.items() if v['status']=='blocked')
+                outcome={'status':'blocked','summary':reason,'limitations':missing or ['Dependency is blocked'],'capability_requests':missing,'artifacts':[]}
+            else:
+                worker=agent_id
+                outcome=call('work:'+department+':'+key,agent_id,'work',briefing,lambda v:contracts.worker_result(v,task,department))
+            prefix='work:'+department+':'+key+':tool:'
+            evidence=self.store.query('SELECT name,arguments,result,created_at FROM org_tool_calls WHERE run_id=? AND substr(call_key,1,?)=? ORDER BY rowid',(run_id,len(prefix),prefix))
+            for item in evidence:item['arguments']=json.loads(item['arguments']);item['result']=json.loads(item['result'])
+            observed={item['name'] for item in evidence if item['result']['status']=='ok'}
+            unobserved=set(task['requires'])-{'draft_artifact'}-observed
+            if outcome['status']=='produced' and unobserved:outcome={'status':'blocked','summary':'Required tool evidence is missing','limitations':sorted(unobserved),'capability_requests':sorted(unobserved),'artifacts':[]}
+            unavailable=[item['name']+': '+item['result']['status'] for item in evidence if item['result']['status'] not in {'ok','needs_input'} and item['name'] not in observed]
+            outcome={**outcome,'limitations':list(dict.fromkeys(outcome['limitations']+unavailable)),'tool_evidence':evidence}
+            send('result:'+department+':'+key,agent_id,head,'task.result',outcome)
+            blocker={'department':department,'task':key,'reason':outcome['summary'],'kind':'missing_capability' if outcome['capability_requests'] else 'dependency' if failed else 'quality','capability_requests':outcome['capability_requests']} if outcome['status']=='blocked' else None
+            ids=[]
+            for artifact in outcome['artifacts']:
+                path=department+'/'+artifact['path'];aid=department+':'+key+':'+artifact['path']
+                self.store.execute('INSERT OR IGNORE INTO org_artifacts VALUES(?,?,?,?,?,?,?)',(run_id,aid,agent_id,key,path,artifact['content'],hashlib.sha256(artifact['content'].encode()).hexdigest()));ids.append(aid)
+            return {'outcome':outcome,'worker':worker,'blocker':blocker,'artifact_ids':ids}
+        def report(department,keys,done):
+            head=department+'-001';items={k:done['task:'+department+':'+k] for k in keys}
+            outcomes={k:v['outcome'] for k,v in items.items()};ids=[aid for v in items.values() for aid in v['artifact_ids']]
+            blockers=[v['blocker'] for v in items.values() if v['blocker']]
+            value=call('report:'+department,head,'report',{'department':department,'employee_results':outcomes,'artifact_ids':ids,
+                'saved_files':self.store.query('SELECT id,path,sha256 FROM org_artifacts WHERE run_id=? AND path LIKE ? ORDER BY path',(run_id,department+'/%')),
+                'instruction':'Collect every employee result, report actual progress, blockers and bounded improvements. Reference only supplied artifact IDs. Do not conceal failed tasks.'},lambda v:contracts.report(v,ids))
+            value={**value,'tool_evidence':[e for v in outcomes.values() for e in v.get('tool_evidence',[])],
+                'blockers':value['blockers']+[b['task']+': '+b['reason'] for b in blockers],
+                'published_artifacts':self.store.query('SELECT id,path,content,sha256 FROM org_artifacts WHERE run_id=? AND path LIKE ? ORDER BY id',(run_id,department+'/%'))}
+            send('report:'+department,head,'director-001','department.report',value)
+            for peer in order:
+                if peer!=department:send('progress:'+department+':'+peer,head,peer+'-001','department.progress',value)
+            return value
+        for department in order:
+            bkey='begin:'+department
+            jobs[bkey]=lambda done,d=department:begin(d,done)
+            dependencies[bkey]=['report:'+d for d in proposals[department]['depends_on']]
+            tasks={t['key']:t for t in proposals[department]['tasks']}
+            keys=contracts.topological({k:t['depends_on'] for k,t in tasks.items()})
+            for key in keys:
+                job='task:'+department+':'+key;task=tasks[key]
+                jobs[job]=lambda done,d=department,t=task:work(d,t,done)
+                dependencies[job]=[bkey]+['task:'+department+':'+k for k in task['depends_on']]
+            jobs['report:'+department]=lambda done,d=department,keys=keys:report(d,keys,done)
+            dependencies['report:'+department]=['task:'+department+':'+k for k in keys]
+        results=run_dag(jobs,dependencies,self.concurrency)
+        reports={d:results['report:'+d] for d in order}
+        workers={v['worker'] for key,v in results.items() if key.startswith('task:') and v['worker']}
+        blockers=[v['blocker'] for key,v in results.items() if key.startswith('task:') and v['blocker']]
+        return reports,blockers,workers
 
     def _execute_checks(self, run_id, mission):
         progress.record(self.store,run_id,None,'checks')
@@ -289,13 +339,35 @@ class DepartmentOrganization:
                 result={'engine':'SQLite / in-memory read-only','passed':all(c['passed'] for c in observed),'checks':observed}
                 self.store.execute('INSERT INTO org_executions VALUES(?,?,?,?,?)',(run_id,path,digest,encode(result),now()))
             evidence.append({'path':path,'input_hash':digest,'result':result})
+        from .execution_adapters import execute_browser,execute_container
+        files=self.store.query('SELECT path,content FROM org_artifacts WHERE run_id=? ORDER BY path',(run_id,))
+        for kind,check in [('browser',c) for c in mission.get('browser_checks',[])]+[(c['profile'],c) for c in mission.get('runtime_checks',[])]:
+            path=check['path'];entry=next((f for f in files if f['path']==path),None)
+            # Acceptance uses only saved source, never arbitrary host paths.
+            selected=[f for f in files if f['path'].split('/')[0]==path.split('/')[0]]
+            digest=hashlib.sha256(encode({'files':selected,'check':check}).encode()).hexdigest();key=kind+':'+path
+            prior=self.store.query('SELECT * FROM org_executions WHERE run_id=? AND path=?',(run_id,key))
+            if prior:
+                if prior[0]['input_hash']!=digest:raise ValueError('Runtime evidence inputs changed during resume')
+                result=json.loads(prior[0]['result'])
+            else:
+                if not entry:result={'passed':False,'status':'missing_artifact','error':'Required saved runtime entry is missing'}
+                elif kind=='browser':result=execute_browser(selected,path,check['checks'])
+                else:
+                    root=path.rsplit('/',1)[0]+'/'
+                    project=[{'path':f['path'].removeprefix(root),'content':f['content']} for f in selected if f['path'].startswith(root)]
+                    result=execute_container(kind,project,path.removeprefix(root))
+                    if kind=='python':result={**result,'passed':bool(result['passed'] and result.get('stdout')==check['expected_stdout'])}
+                self.store.execute('INSERT INTO org_executions VALUES(?,?,?,?,?)',(run_id,key,digest,encode(result),now()))
+            evidence.append({'path':path,'kind':kind,'input_hash':digest,'result':result})
         return evidence
 
     @staticmethod
     def _check_artifacts(mission, artifacts):
         by_path = {a['path']:a for a in artifacts}
         errors = []
-        for check in mission['artifact_checks']:
+        declared=[{'path':d['path'],'type':'html' if d['kind']=='html' else 'exists'} for d in mission.get('deliverables',[])]
+        for check in mission['artifact_checks']+declared:
             artifact = by_path.get(check['path'])
             if not artifact:
                 errors.append('Missing required artifact: '+check['path'])

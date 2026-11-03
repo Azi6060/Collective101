@@ -6,18 +6,116 @@ const base=process.env.COLLECTIVE101_TEST_URL;
 if(!base)throw new Error('Run npm.cmd run test:ui to use the isolated test service.');
 const html=await readFile(new URL('../collective101/web/index.html',import.meta.url),'utf8');
 const script=await readFile(new URL('../collective101/web/app.js',import.meta.url),'utf8');
+const markdownScripts=await Promise.all(['vendor/marked.umd.js','vendor/purify.min.js','markdown.js'].map(file=>readFile(new URL('../collective101/web/'+file,import.meta.url),'utf8')));
 async function waitFor(predicate,timeout=25000){const end=Date.now()+timeout;while(Date.now()<end){if(await predicate())return;await new Promise(resolve=>setTimeout(resolve,70));}throw new Error('Timed out waiting for UI state');}
-async function setup(){
+async function setup(healthOverride=null){
   const errors=[];const virtualConsole=new VirtualConsole();virtualConsole.on('jsdomError',error=>errors.push(error.message));
   const dom=new JSDOM(html,{url:base,runScripts:'outside-only',virtualConsole});
   const win=dom.window;let poll=()=>{};
-  win.fetch=(url,options={})=>{const target=new URL(url,base);assert.equal(target.origin,base);return fetch(target,{...options,headers:{...options.headers,...(options.method==='POST'?{Origin:base}:{})}});};
+  win.fetch=async(url,options={})=>{const target=new URL(url,base);assert.equal(target.origin,base);const response=await fetch(target,{...options,headers:{...options.headers,...(options.method==='POST'?{Origin:base}:{})}});if(target.pathname==='/api/health'&&healthOverride){const data=await response.json();return {ok:response.ok,json:async()=>({...data,...healthOverride})};}return response;};
   win.setInterval=fn=>{poll=fn;return 1;};win.HTMLElement.prototype.scrollIntoView=function(){};
-  win.eval(script);
+  for(const code of markdownScripts.slice(0,2))win.eval(code);
+  win.eval(markdownScripts[2]+'\n'+script+'\nglobalThis.__testShowSource=showSource;');
   await waitFor(()=>win.document.documentElement.dataset.ready==='true');
   return {dom,win,doc:win.document,poll:()=>poll(),errors};
 }
 function submit(win,form){form.dispatchEvent(new win.Event('submit',{bubbles:true,cancelable:true}));}
+
+test('assistant Markdown has paragraphs, lists, safe links and inert code',async()=>{
+  const app=await setup();try{
+    app.doc.querySelector('[data-nav="chat"]').click();
+    app.doc.getElementById('mission-input').value='formatting-check';submit(app.win,app.doc.getElementById('mission-form'));
+    await waitFor(async()=>{await app.poll();return app.doc.getElementById('chat-status').textContent==='answered';});
+    const body=app.doc.querySelector('.message.assistant .markdown-body');
+    assert.ok(body);assert.equal(body.querySelectorAll('ol > li').length,2);
+    assert.equal(body.querySelector('strong').textContent,'two cafes');
+    assert.ok(body.querySelectorAll('p').length>=2);
+    assert.match(body.querySelector('pre code').textContent,/<script>/);
+    assert.equal(body.querySelector('script,img,iframe,style'),null);
+    assert.equal(body.querySelector('a[href^="javascript:"]'),null);
+    assert.equal(body.querySelector('a').target,'_blank');assert.match(body.querySelector('a').rel,/noopener/);
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
+
+test('Markdown file opens in Preview with an exact Source tab and no fingerprint details',async()=>{
+  const app=await setup();try{
+    const source='# Cafe notes\n\n**Reviewed** source.\n\n| Cafe | Area |\n| --- | --- |\n| One | KL |\n\n<script>alert(1)</script>\n\n![remote](https://example.com/track.png)';
+    app.win.__testShowSource({path:'research/notes.md',content:source,sha256:'a'.repeat(64)});
+    assert.equal(app.doc.getElementById('file-preview-tab').getAttribute('aria-selected'),'true');
+    const preview=app.doc.getElementById('file-preview');
+    assert.equal(preview.querySelector('h1').textContent,'Cafe notes');assert.ok(preview.querySelector('table'));
+    assert.equal(preview.querySelector('script,img,iframe,style'),null);
+    assert.equal(app.doc.querySelector('#file-fingerprint'),null);
+    assert.equal(app.doc.getElementById('file-viewer').textContent.includes('File details'),false);
+    app.doc.getElementById('file-source-tab').click();
+    assert.equal(app.doc.getElementById('file-source').hidden,false);
+    assert.equal(app.doc.getElementById('file-source').textContent,source);
+    assert.equal(preview.hidden,true);
+    app.win.__testShowSource({path:'engineering/index.html',content:'<script>doNotExecute()</script>'});
+    assert.equal(app.doc.getElementById('file-tabs').hidden,true);
+    assert.equal(app.doc.getElementById('file-source').hidden,false);
+    assert.equal(app.doc.querySelector('#file-source script'),null);
+  }finally{app.dom.window.close();}
+});
+
+test('chat budget uses the raised allowance and respects a lower running-server ceiling',async()=>{
+  const current=await setup();try{
+    assert.equal(current.doc.getElementById('budget-tokens').value,'10000000');
+    assert.equal(current.doc.getElementById('budget-tokens').max,'10000000');
+  }finally{current.dom.window.close();}
+  const session=await (await fetch(base+'/api/session')).json();
+  const health=await (await fetch(base+'/api/health',{headers:{'X-Console-Token':session.token}})).json();
+  const older=await setup({limits:{...health.limits,max_admission_units_per_chat:2000000}});try{
+    assert.equal(older.doc.getElementById('budget-tokens').value,'2000000');
+    assert.equal(older.doc.getElementById('budget-tokens').max,'2000000');
+  }finally{older.dom.window.close();}
+});
+
+test('old server requires restart and cannot receive new chat requests through the updated UI',async()=>{
+  const app=await setup({version:'0.5-reviewed-work',features:{}});try{
+    let sent=false;const original=app.win.fetch;
+    app.win.fetch=(url,options)=>{if(options?.method==='POST')sent=true;return original(url,options);};
+    assert.equal(app.doc.getElementById('send-mission').disabled,true);
+    assert.match(app.doc.getElementById('notice').textContent,/Restart/);
+    app.doc.getElementById('mission-input').value='Build a grocery landing page';submit(app.win,app.doc.getElementById('mission-form'));
+    await waitFor(()=>app.doc.getElementById('notice').textContent.includes('before sending'));
+    assert.equal(sent,false);
+  }finally{app.dom.window.close();}
+});
+
+test('model source is visible in chat and connectors when only environment config exists',async()=>{
+  const app=await setup({live_configured:true,model_configuration:{configured:true,enabled:true,credential_source:'environment',settings_source:'environment_defaults',model:'muse-spark-1.3',endpoint_host:'api.meta.ai',request_policy:{max_output_tokens:32768,timeout_seconds:120}}});
+  try{
+    assert.match(app.doc.getElementById('mode-description').textContent,/environment/i);
+    app.doc.querySelector('[data-nav="connectors"]').click();
+    await waitFor(()=>app.doc.getElementById('model-configuration')?.textContent.includes('muse-spark-1.3'));
+    assert.match(app.doc.getElementById('model-configuration').textContent,/environment/i);
+    assert.match(app.doc.getElementById('model-configuration').textContent,/api.meta.ai/);
+    assert.match(app.doc.getElementById('model-configuration').textContent,/32,768|32768/);
+    assert.match(app.doc.getElementById('model-configuration').textContent,/not.*verif|not.*test/i);
+  }finally{app.dom.window.close();}
+});
+
+test('model request settings save without storing an environment credential',async()=>{
+  const app=await setup();try{
+    app.doc.querySelector('[data-nav="connectors"]').click();
+    await waitFor(()=>!app.doc.getElementById('connector-list').textContent.includes('Loading connections'));
+    app.doc.querySelector('[data-connector="meta"] button').click();
+    app.doc.getElementById('connector-max-output').value='20000';
+    app.doc.getElementById('connector-timeout').value='150';
+    submit(app.win,app.doc.getElementById('connector-form'));
+    await waitFor(()=>app.doc.getElementById('connector-setup').classList.contains('d-none'));
+    await waitFor(()=>app.doc.getElementById('model-configuration').textContent.includes('20,000'));
+    assert.equal(app.doc.getElementById('connector-secret').value,'');
+    assert.match(app.doc.getElementById('model-configuration').textContent,/150 seconds/);
+    assert.match(app.doc.getElementById('model-configuration').textContent,/No credential detected/);
+    app.doc.querySelector('[data-connector="meta"] button').click();
+    assert.equal(app.doc.getElementById('connector-max-output').value,'20000');
+    assert.equal(app.doc.getElementById('connector-timeout').value,'150');
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
 
 test('directory exposes departments, roles, reporting lines and per-agent activity',async()=>{
   const app=await setup();try{
@@ -28,6 +126,38 @@ test('directory exposes departments, roles, reporting lines and per-agent activi
     app.doc.querySelector('#search-results button').click();
     assert.match(app.doc.getElementById('agent-inspector').textContent,/Reports to: Mission Director/);
     assert.equal(app.doc.querySelectorAll('#activity-agent option').length,102);
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
+
+test('Effectiveness exposes honest scorecards and versioned role cases without starting paid work',async()=>{
+  const app=await setup();try{
+    app.doc.querySelector('[data-nav="evaluations"]').click();
+    await waitFor(()=>app.doc.querySelectorAll('#evaluation-agents tr').length===101);
+    assert.ok(app.doc.querySelectorAll('[name="evaluation-case"]').length>=22);
+    assert.match(app.doc.getElementById('evaluation-policy').textContent,/80%/);
+    assert.match(app.doc.getElementById('evaluation-notice').textContent,/Fixtures never count/);
+    assert.equal(app.doc.getElementById('start-evaluation').disabled,true);
+    await waitFor(()=>app.doc.getElementById('memory-evidence').textContent.includes('frozen snapshot'));
+    assert.match(app.doc.getElementById('memory-evidence').textContent,/frozen snapshot/);
+    const search=app.doc.getElementById('evaluation-search');search.value='engineering-001';search.dispatchEvent(new app.win.Event('input'));
+    assert.equal(app.doc.querySelectorAll('#evaluation-agents tr').length,1);
+    assert.match(app.doc.getElementById('evaluation-agents').textContent,/untested/);
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
+
+test('confirmed evaluation uses only injected test provider and its fixtures cannot promote effectiveness',async()=>{
+  const app=await setup({live_configured:true});try{
+    app.doc.querySelector('[data-nav="evaluations"]').click();
+    await waitFor(()=>app.doc.querySelector('[name="evaluation-case"][value="intake-greeting"]'));
+    app.doc.querySelector('[name="evaluation-case"][value="intake-greeting"]').checked=true;
+    app.doc.getElementById('evaluation-calls').value='10';app.doc.getElementById('evaluation-confirm').checked=true;
+    submit(app.win,app.doc.getElementById('evaluation-form'));
+    await waitFor(async()=>{await app.poll();return app.doc.getElementById('evaluation-detail').textContent.includes('Passed');});
+    assert.match(app.doc.getElementById('evaluation-detail').textContent,/fixture/);
+    assert.equal(app.doc.getElementById('evaluation-confirm').checked,false);
+    assert.equal(app.doc.querySelectorAll('#evaluation-agents .meets_benchmark').length,0);
     assert.deepEqual(app.errors,[]);
   }finally{app.dom.window.close();}
 });
@@ -42,11 +172,57 @@ test('short mission asks questions and answers continue to a recorded result',as
     submit(app.win,app.doc.querySelector('form.intervention'));
     await waitFor(async()=>{await app.poll();return app.doc.getElementById('chat-status').textContent==='reviewed';});
     assert.match(app.doc.getElementById('brief-content').textContent,/SUCCESS CRITERIA/);
+    assert.equal(app.doc.getElementById('preview-project').disabled,false);
+    assert.ok(app.doc.querySelector('[aria-label="Preview engineering/index.html in a new tab"]'));
+    app.win.open=()=>null;
+    app.doc.getElementById('preview-project').click();
+    await waitFor(()=>!app.doc.getElementById('preview-link').classList.contains('d-none'));
+    const link=app.doc.getElementById('preview-link');
+    assert.equal(link.target,'_blank');assert.match(link.rel,/noopener/);
+    assert.notEqual(new URL(link.href).port,new URL(base).port);
+    const response=await fetch(link.href);assert.equal(response.status,200);
+    assert.match(await response.text(),/Auto-refresh/);
     app.doc.getElementById('view-evidence').click();
     await waitFor(()=>app.doc.querySelectorAll('#activity-content details').length>0);
     assert.match(app.doc.getElementById('activity-mode').textContent,/Live Meta/);
     assert.deepEqual(app.errors,[]);
   }finally{app.dom.window.close();}
+});
+
+test('missing HTML keeps Preview disabled with actionable explanation',async()=>{
+  const app=await setup();try{
+    app.doc.querySelector('.new-mission').click();
+    assert.equal(app.doc.getElementById('preview-project').disabled,true);
+    assert.match(app.doc.getElementById('preview-status').textContent,/No HTML/);
+    assert.ok(app.doc.getElementById('preview-link').classList.contains('d-none'));
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
+
+test('preview auto-refresh follows saved revisions, manual mode preserves view and missing page is explained',async()=>{
+  const page=await readFile(new URL('../collective101/web/preview/index.html',import.meta.url),'utf8');
+  const code=await readFile(new URL('../collective101/web/preview/preview.js',import.meta.url),'utf8');
+  const errors=[];const console=new VirtualConsole();console.on('jsdomError',e=>errors.push(e.message));
+  const dom=new JSDOM(page,{url:'http://127.0.0.1:12345/p/test/',runScripts:'outside-only',virtualConsole:console,pretendToBeVisual:true});
+  const win=dom.window,doc=win.document;let poll;
+  let meta={ready:true,entries:['engineering/index.html'],revision:'first',title:'Coffee shop',status:'running'};
+  win.fetch=async()=>({ok:true,json:async()=>meta});win.setInterval=fn=>{poll=fn;};win.eval(code);
+  try{
+    await waitFor(()=>doc.getElementById('site').src.includes('revision=first'));
+    const first=doc.getElementById('site').src;
+    assert.equal(doc.getElementById('site').getAttribute('sandbox'),'allow-scripts');
+    meta={...meta,revision:'second'};poll();
+    await waitFor(()=>doc.getElementById('site').src.includes('revision=second'));
+    assert.notEqual(doc.getElementById('site').src,first);
+    doc.getElementById('auto').checked=false;meta={...meta,revision:'third'};poll();
+    await waitFor(()=>doc.getElementById('state').textContent.includes('Updates available'));
+    assert.match(doc.getElementById('site').src,/revision=second/);
+    doc.getElementById('refresh').click();await waitFor(()=>doc.getElementById('site').src.includes('revision=third'));
+    meta={...meta,ready:false,entries:[],reason:'No HTML page has been saved yet.'};poll();
+    await waitFor(()=>doc.getElementById('site').hidden);
+    assert.match(doc.getElementById('empty').textContent,/No HTML/);
+    assert.deepEqual(errors,[]);
+  }finally{win.close();}
 });
 test('JavaScript mission displays real sandbox evidence and escapes user markup',async()=>{
   const app=await setup();try{
@@ -136,7 +312,9 @@ test('chat composer grows without manual resizing and runtime status stays outsi
   const app=await setup();try{
     app.doc.querySelector('[data-nav="chat"]').click();
     assert.equal(app.doc.querySelector('#view-chat .chat-side'),null);
-    assert.equal(app.doc.querySelector('#mission-details').open,false);
+    assert.equal(app.doc.querySelector('#mission-details'),null);
+    assert.equal(app.doc.querySelector('#view-chat .chat-toolbar'),null);
+    assert.equal(app.doc.querySelector('#chat-inspector').open,false);
     const input=app.doc.getElementById('mission-input');
     Object.defineProperty(input,'scrollHeight',{configurable:true,get:()=>input.value.length>50?280:48});
     input.value='x'.repeat(100);input.dispatchEvent(new app.win.Event('input'));assert.equal(input.style.height,'200px');assert.equal(input.style.overflowY,'auto');

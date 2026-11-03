@@ -21,6 +21,9 @@
     "knowledge_search",
     "knowledge_read",
     "memory_search",
-    "web_search"
+    "web_search",
+    "browser_sandbox",
+    "python_sandbox",
+    "node_build_sandbox"
   ]
 }

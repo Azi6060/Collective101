@@ -4,6 +4,8 @@ from .store import encode,now
 from .secret_vault import SecretVault
 from .mcp_client import MCPClient,endpoint_parts
 from .registry import DEPARTMENT_MAP
+from .provider import request_policy
+from urllib.parse import urlsplit
 
 SCHEMA='''CREATE TABLE IF NOT EXISTS connector_configs(
  id TEXT PRIMARY KEY,kind TEXT NOT NULL,name TEXT NOT NULL,url TEXT NOT NULL,model TEXT NOT NULL,
@@ -26,6 +28,8 @@ class ConnectorManager:
         self.store,self.roster,self.vault=store,roster,SecretVault()
         with store.transaction() as db:
             db.executescript(SCHEMA)
+            if 'model_options' not in {r[1] for r in db.execute('PRAGMA table_info(connector_configs)')}:
+                db.execute("ALTER TABLE connector_configs ADD COLUMN model_options TEXT NOT NULL DEFAULT '{}'")
             # The workspace owner now connects tools for the whole organization.
             # Updating legacy scope also invalidates existing mission fingerprints.
             scope=encode(sorted(DEPARTMENT_MAP))
@@ -33,7 +37,7 @@ class ConnectorManager:
     def _rows(self):
         rows=self.store.query('SELECT * FROM connector_configs ORDER BY kind,name')
         for row in rows:
-            for field in ('departments','tools','selected'):row[field]=json.loads(row[field])
+            for field in ('departments','tools','selected','model_options'):row[field]=json.loads(row[field])
         return rows
     def _get(self,cid):
         rows=[r for r in self._rows() if r['id']==cid]
@@ -64,25 +68,45 @@ class ConnectorManager:
         secret=self.vault.seal(value) if value else old['secret'] if old else ''
         model=data.get('model','')
         if not isinstance(model,str) or len(model)>200:raise ValueError('Invalid model name')
+        options=data.get('model_options',old['model_options'] if old else {}) if kind=='meta' else {}
+        if not isinstance(options,dict) or set(options)-{'max_output_tokens','timeout_seconds','temperature'}:
+            raise ValueError('Invalid model request settings')
+        if kind=='meta':request_policy(options.get('max_output_tokens'),options.get('timeout_seconds'),options.get('temperature'))
         # Changing configuration revokes tool selections until explicitly enabled again.
         enabled=int(kind=='meta')
         tools=[];selected=[]
-        self.store.execute('''INSERT INTO connector_configs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+        self.store.execute('''INSERT INTO connector_configs(id,kind,name,url,model,secret,enabled,departments,tools,selected,allow_local,error,updated_at,model_options) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET name=excluded.name,url=excluded.url,model=excluded.model,secret=excluded.secret,
             enabled=excluded.enabled,departments=excluded.departments,tools=excluded.tools,selected=excluded.selected,
-            allow_local=excluded.allow_local,error=NULL,updated_at=excluded.updated_at''',
-            (cid,kind,name,url,model,secret,enabled,encode(departments),encode(tools),encode(selected),int(local),None,now()))
+            allow_local=excluded.allow_local,error=NULL,updated_at=excluded.updated_at,model_options=excluded.model_options''',
+            (cid,kind,name,url,model,secret,enabled,encode(departments),encode(tools),encode(selected),int(local),None,now(),encode(options)))
         return self.public(self._get(cid))
     def model_ready(self):
+        return self.model_configuration()['configured']
+    def model_configuration(self):
+        """Presence/provenance only; never decrypt a key for health or UI display."""
         row=next((r for r in self._rows() if r['kind']=='meta'),None)
-        return bool((row['enabled'] and (row['secret'] or os.environ.get('MODEL_API_KEY'))) if row else os.environ.get('MODEL_API_KEY'))
+        source='saved_connector' if row and row['secret'] else 'environment' if os.environ.get('MODEL_API_KEY') else 'none'
+        enabled=bool(row['enabled']) if row else True
+        options=row['model_options'] if row else {}
+        result={'configured':enabled and source!='none','enabled':enabled,'credential_source':source,
+                'settings_source':'saved_connector' if row else 'environment_defaults',
+                'model':(row['model'] if row else '') or os.environ.get('META_MODEL') or 'muse-spark-1.3',
+                'endpoint_host':urlsplit(row['url'] if row else 'https://api.meta.ai/v1').hostname,
+                'connection_verified':False}
+        try:result['request_policy']=request_policy(options.get('max_output_tokens'),options.get('timeout_seconds'),options.get('temperature'))
+        except ValueError as error:result.update(configured=False,error=str(error),request_policy={})
+        return result
     def model_provider(self):
         from .provider import MetaProvider
         row=next((r for r in self._rows() if r['kind']=='meta'),None)
         if row and not row['enabled']:raise ValueError('Live model disconnected. Configure it in Connectors.')
+        configuration=self.model_configuration()
+        if configuration.get('error'):raise ValueError(configuration['error'])
         if not self.model_ready():raise ValueError('Live chat requires a model connection in Connectors or MODEL_API_KEY; no response was generated.')
         return MetaProvider(api_key=self.vault.reveal(row['secret']) if row and row['secret'] else None,
-            base_url=row['url'] if row else 'https://api.meta.ai/v1',model=(row['model'] or None) if row else None)
+            base_url=row['url'] if row else 'https://api.meta.ai/v1',model=(row['model'] or None) if row else None,
+            max_output_tokens=configuration['request_policy']['max_output_tokens'],timeout=configuration['request_policy']['timeout_seconds'],temperature=configuration['request_policy']['temperature'])
     def brave_access(self,agent_id):
         row=next((r for r in self._rows() if r['kind']=='brave'),None)
         return agent_id in self.roster and (not row or bool(row['enabled']))

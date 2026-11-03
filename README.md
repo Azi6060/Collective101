@@ -112,7 +112,7 @@ python -m collective101 organization --mission examples/website-mission.json --p
 
 `META_MODEL` overrides the adapter's configured default. No `.env` file is loaded automatically. No key belongs in source, command arguments, reports or Git. The model selected in the development chat does not configure this application's provider.
 
-The existing Meta chat-completions adapter is reused unchanged. It never falls back to fixtures. A run records provider mode, model and endpoint and requires those to match on resume. A shared persistent budget includes intake and mission provider calls. The chat UI lets you lower the 160-call and 2,000,000-token-admission-unit defaults. Before each call the runtime charges serialized request UTF-8 bytes plus the 4,096-output-token allowance; reservations remain charged after failures or restarts. Provider-reported usage is tracked separately. This is conservative admission control, not an exact tokenizer, billing ceiling or dollar estimate. The legacy run counter still shows department calls only; the UI also shows the combined task ledger. Live execution of the new department cycle remains unverified.
+The existing Meta chat-completions adapter never falls back to fixtures. A run records provider mode, model and endpoint and requires those to match on resume. A shared persistent budget includes intake, mission calls and revisions. The chat UI lets you lower the 160-call and 10,000,000-admission-unit defaults. Before each call the runtime reserves serialized request UTF-8 bytes plus the phase's actual output allowance; reservations remain charged after failures or restarts. Provider-reported usage is tracked separately. This is conservative admission control, not an exact tokenizer, billing ceiling or dollar estimate. Existing ledgers keep their limits unless the user explicitly requests an increase; usage is never reset by raising a cap. The legacy run counter shows department calls only; the UI also shows the combined task ledger. Live organizational quality still needs evaluation.
 
 ## Structure
 
@@ -176,6 +176,68 @@ Its static HTML report and numerical acceptance checks remain available. The fiv
 
 ## Reviewed work, memory and evaluation
 
+### Chat workspace and source delivery
+
+Chat uses a collapsible navigation rail with **New chat** and readable saved-chat titles. The conversation has no workspace bar, visible status badge or redundant chat heading. A top-right **Files & activity** panel contains saved source files, line counts, additions/removals across revisions, diagnostics, plan/limits and pause/resume controls. Status text and elapsed time below the conversation reflect recorded runtime actions; they are not model reasoning. The composer stays docked and grows to 200 px.
+
+Open any saved file to inspect its source as plain text, or use **Download ZIP** to retrieve all files saved so far, including partial work. The ZIP preserves department folders, merges previous builds/repair files by path with the newest version winning, and includes a provenance/status manifest. Open `engineering/index.html` after extraction for a static website. Generated HTML is never executed inside the console. Archives contain source artifacts only, not databases or credentials; session authorization, normalized paths, case/prefix collision rejection and a 20 MiB export bound apply. Counts measure saved lines/revision diffs, not keystrokes or tokens. Existing files absent from a partial repair are retained.
+
+For a build, Distribution declares `delivery_type` and concrete department-owned `deliverables`. Website delivery requires Engineering and an engineering-owned HTML source path. The owner's head must assign that file, the Director must retain its owner in the team, and deterministic HTML checks require the actual source even if the model reviewer approves. Supporting plans alone cannot satisfy the declared delivery. `draft_artifact` is built-in JSON file output, not a missing external tool; heads receive persisted file hashes.
+
+Published paths include the department (`engineering/index.html`); task outputs and worker artifact paths use the relative filename (`index.html`). Version 0.7.1 accepts either equivalent form for the same department and normalizes it once before assignment/delivery checks. Duplicate aliases, unsafe paths and missing or genuinely different deliverables are still rejected. Heads also receive explicit `required_outputs`. Future rejected planning records retain bounded attempted-path metadata and the validation reason in Activity, without saving invalid files as completed work. Older failures whose candidate outputs were not recorded cannot be reconstructed retroactively.
+
+An upstream head's soft integration concern does not automatically suppress downstream employees. Explicit failed local task dependencies and essential missing tool permissions remain blockers. After all departments finish, heads with soft concerns receive one bounded reconciliation pass with completed peer files; fulfilled handoffs can be cleared. Actual runtime task failures cannot be erased. Repairable quality/dependency failures may then enter the existing correction rounds under the original criteria and shared budget. True missing capabilities remain blocked without blind retries.
+
+You can send follow-ups to completed or blocked chats. The original conversation, prior file excerpts, diagnostics and shared budget remain available to Distribution; a new build starts only if the model decides to create it. Full chat history remains in SQLite. Per request, the latest conversation window is capped at 96,000 UTF-8 bytes, preserving the newest turn and initial intent (an excerpt in the largest Unicode edge case). Older turns omitted from that request are disclosed; this is windowing, not semantic summarization or deletion. Source context supplied to a continuation is explicitly bounded and labeled if truncated.
+
+| Active application limit | Value |
+| --- | ---: |
+| User message | 12,000 characters |
+| Serialized model input | 262,144 UTF-8 bytes per request |
+| Chat-history window sent | 96,000 UTF-8 bytes |
+| Default work generation allowance | 16,384 tokens |
+| Configured generation ceiling | 32,768 tokens, including reasoning |
+| Default work timeout / retry maximum | 120 / 300 seconds |
+| Call / admission ceiling per chat | 160 / 10,000,000 units |
+| File content | 80,000 characters per artifact |
+| Correction rounds | 1 default, 2 maximum |
+
+Input admission units are conservative byte-based accounting, not exact token counts. Meta documents a 1,048,576-token Muse Spark context window; this app intentionally applies its smaller input guard. See [Meta long-context guidance](https://dev.meta.ai/docs/cookbook/long-context). Provider failures, truncated output and invalid agent output have separate limits (3 / 2 / 2) and twelve total requests per step; no indefinite retry loop exists. Chat's Plan and limits section shows current values and saved-history usage.
+
+**Temperature** is now optional in Connectors → Live model → Model request limits, or via `MODEL_TEMPERATURE`; allowed values are 0–2, default 1.0. It controls sampling, not agent training or orchestration correctness. The phase profiles retain low intake and medium work reasoning. Meta recommends the default temperature for Muse Spark; see [Chat Completions parameters](https://dev.meta.ai/docs/protocols/chat-completions).
+
+Refresh the console after an update. A frontend connected to an older backend disables new submissions and asks for a restart, preventing requests from silently using outdated delivery logic. Version **0.8-static-preview** adds local website previews. Automatic dependency installation, full-stack runtimes and deployment remain outside this local drafting harness.
+
+### Preview generated websites
+
+Open a chat, expand **Files & activity**, then select **Preview ↗** beside Download ZIP or beside an HTML file. A new browser tab opens on a separate loopback port, selects `engineering/index.html` when available, and offers other saved HTML pages in a Page selector. No ZIP extraction or terminal command is required. If a popup is blocked, use the **Open website preview** link shown in the file panel.
+
+The preview shows saved static HTML/CSS/JavaScript, including partial work. **Refresh** reloads the latest saved files; **Auto-refresh** checks for saved revisions every two seconds while the preview tab is visible. Turn it off to keep the current view while agents work. No HTML yet means a disabled Preview button with an explanation. A build-dependent project without HTML is identified as needing a build/runtime. A visible page is not proof of acceptance or browser quality verification by the organization.
+
+Relative local assets and inline interaction scripts are supported. Root-relative URLs (such as `/styles.css`), CDN resources, network-backed features, server routes and unbuilt JSX/TSX need adaptation or a future runtime. External resource loads, fetch/WebSocket connections and form submissions are restricted. Generated documents run in an opaque-origin sandbox inside the preview; they cannot access the console or preview toolbar. No shell, package install, environment key, host file or external write API is exposed. Preview URLs are local bearer links: keep them private and reopen Preview after a server restart. Up to eight distinct chat previews and 20 MiB of saved files per preview are admitted.
+
+Chat completions use a short agent-authored `user_summary` when available, with a readable fallback for older results. Failed runtime checks override positive prose. Assistant replies render Markdown paragraphs, lists, emphasis, links, code and tables; user input remains plain text. Markdown files open in **Preview**, with a **Source** tab showing exact saved text. The file viewer has no fingerprint/details section; integrity hashes and review records remain internal. Successful replies no longer carry a prior turn's error banner. No extra model request rewrites historical messages.
+
+Markdown uses locally served, pinned Marked 18.1.3 and DOMPurify 3.4.17 bundles under `collective101/web/vendor`, with their licenses retained. [Marked recommends sanitizing its output](https://marked.js.org/using_advanced); the console uses a restricted tag/attribute allowlist, inert raw HTML, no remote Markdown images and safe link protocols. This renders documents; executable website Preview remains separately isolated. Source/downloads preserve original content.
+
+### Model configuration and request reliability
+
+Connectors shows the active model, endpoint host, credential source (**Server environment**, **Saved connector**, or missing), settings source and request limits. Chat also identifies the model/source. `MODEL_API_KEY` injected by a secrets manager is detected as a server-environment credential; the app cannot identify the supplying extension. A saved connector key takes precedence over an environment key. Disconnecting a saved model prevents environment fallback until enabled again. Credential presence does not test authentication, connectivity or available credits, and keys are never returned to the browser.
+
+Live model setup includes optional **Model request limits**. Defaults: a 32,768 generation-token cap and a 120-second work-request timeout. Blank settings inherit `MODEL_MAX_OUTPUT_TOKENS` / `MODEL_REQUEST_TIMEOUT_SECONDS` or defaults. Caps accept 1,024–32,768 tokens and 10–300 seconds. Smaller caps can prevent large deliverables from completing.
+
+| Phase | Initial generation limit | Initial timeout | Reasoning effort |
+| --- | ---: | ---: | --- |
+| Intake | 4,096 | Up to 60 seconds | Low |
+| Employee work | 16,384 | Configured work timeout (120 seconds by default) | Medium |
+| Leadership and review | 8,192 | Up to 90 seconds | Medium |
+
+Initial generation limits are clamped to the operator cap. A truncated response is rejected in full and the next attempt doubles its output allowance up to that cap. Timeout/connection failures increase the next request timeout by 50% per failure, at most 300 seconds, with short bounded backoff. These are socket/request timeouts, not a guaranteed total mission duration. Three provider/transport failures, two truncated responses, two invalid agent outputs, or twelve requests stop a step; the failure categories have separate allowances. Authentication/non-retryable provider errors stop immediately. Four tool turns per step and existing mission call/tool/token limits remain enforced.
+
+Every retry reserves request bytes plus its actual generation allowance before contacting the provider. Truncated and malformed responses retain valid reported usage; timeouts with unknown usage retain their conservative reservation. Retry state and request options persist with call records, and Activity shows the failure category and request limits. No partial result becomes a completed artifact. Intake follows the same policy. The evaluation meter also accounts for actual request allowances. A larger per-request cap can use more credits; these limits are admission controls, not dollar-cost estimates.
+
+The adapter uses Chat Completions `max_completion_tokens` and explicit reasoning effort. Meta documents that reasoning consumes the same generation budget as visible output; see [Chat Completions](https://dev.meta.ai/docs/protocols/chat-completions) and [reasoning](https://dev.meta.ai/docs/reasoning). Requests remain non-streaming; provider-side time limits and outages can still stop a bounded attempt. Restart the local server through the same secrets-manager launch configuration after code changes, then refresh the page. Failed historical missions are not automatically relaunched.
+
 Mission chat is a conversation surface with a docked composer. It grows with input up to 200 px, then scrolls internally; manual resizing is disabled. Enter sends and Shift+Enter inserts a line. Runtime action labels appear in a separate status region, not transcript messages or model reasoning. Mission details and budgets are collapsed; full records remain under Activity. The composer stays visible while work runs.
 
 Missions now allow `max_repair_rounds` from 0 to 2 (default 1). Rejected review or failed deterministic artifact/execution checks can trigger a fresh departmental revision. Heads receive the previous verdict and bounded artifact excerpts, assign corrections and refresh dependencies, and an independent reviewer checks the revision against unchanged criteria. Missing-capability task blockers do not trigger blind retries. Attempts retain separate artifacts, tool results, checks and model calls; Activity aggregates calls and shows the latest artifacts. Pause and human guidance apply to the active revision. All attempts share the original model/token/tool budget. A connector change invalidates repair access rather than silently granting a changed connection.
@@ -193,6 +255,48 @@ Responsibility is advisory and visible in each agent's role inspector and in hea
 A mission may declare `data_checks`: `[{"path":"data/query.sql","tables":{"sales":[{"amount":2},{"amount":3}]},"expected_rows":[[5]]}]` with `sql_sandbox` in allowed capabilities. The runtime executes the generated query and compares observed rows in order. `artifact_checks` also supports `{"path":"engineering/index.html","type":"html"}` for static language/title/main/heading/viewport/image-alt/duplicate-ID checks. These do not render a page or establish full accessibility.
 
 ### Live evaluation
+
+The **Effectiveness** page at `/evaluations` now provides agent scorecards, published case criteria, bounded live runs, request diagnostics and independent human-quality review. All 101 identities are listed; the initial `roles-v1.0` set contains 23 cases covering 15 identities. Other roles remain explicitly untested. Run a small case set first. Select one to three trials and an API-call cap, then explicitly confirm API-credit use. Tests inject scripted providers through Python constructors; fixtures are never a product mode or evidence of live competence.
+
+Scorecards distinguish untested, insufficient evidence, meets benchmark and needs improvement. The initial published policy requires at least nine graded live trials over three distinct cases, a descriptive 95% Wilson lower bound of at least 80%, and no recorded critical failure. If the upper bound is below the target, the verdict is needs improvement; inconclusive evidence stays unrated. Repeated trials are correlated, so this interval is descriptive rather than a general statistical guarantee. Human-pending output, provider failures and unavailable runtimes are excluded from quality rates. The small suites do not establish all-role capability or security certification. File/protocol fixture passes do not count toward the score.
+
+Compare specialist/generalist output, memory off/on, or the departmental team on the addition case. Each trial has an equal cap (up to 40 calls and 1,000,000 admission units), within the whole batch cap (up to 160 calls and 2,000,000 units). Actual spending differs and is shown; incomplete/budget/provider trials are not valid comparison pairs. Direct code/page trials get at most one quality repair, matching the default team revision cap. Model, role hash, case/role snapshots, suite, settings and frozen memory provenance are recorded. Memory arms do not write benchmark answers into operational memory and exclude exact source-objective matches; broader contamination still needs review. Run details show paired wins/losses/ties, token/time changes and whether any reviewed memory was actually available. These are observations, not automatic promotion or proof of learning.
+
+Under Reviewed memory, propose a structured lesson using its agent ID and a recorded source run from Activity. A different agent/model's evidence is rejected. Lessons carry situation/action/outcome/limitations, start proposed, require a human evidence note to approve, expire after 90 days, and can be revoked. Approval permits reference retrieval; it does not prove benefit or change model weights. Director improvement hypotheses appear as proposed experiments with their evidence and measurement plan; they never rewrite roles, prompts or permissions automatically.
+
+### Departmental concurrency and compatibility
+
+New console work defaults to two dependency-ready jobs at a time. Set `COLLECTIVE101_CONCURRENCY` from 1 to 4 before starting the server. Policy is stored per run and preserved across repairs; older runs without a policy retain serial behavior. Department/task dependencies, leadership-only handoffs, unique source ownership, shared request budgets, independent review and bounded retries remain enforced. Tool admission is reserved atomically before dispatch so parallel requests cannot exceed the shared execution cap. An incomplete recorded dispatch is not silently repeated.
+
+The canonical engine is `department_runtime.py`, using the shared scheduler/policy in `runtime_core.py`. The older event-planning engine lives under `legacy/runtime.py`; `runtime.py` keeps compatible imports for earlier callers and CLI commands. Historical databases/readers and existing commands remain supported. This isolates legacy maintenance; it does not claim that both engines have already been fully merged.
+
+### Browser, Python and Node execution adapters
+
+`browser_sandbox` can check supplied static files in isolated system Chrome on Windows, using Playwright from the workspace's full `npm ci --ignore-scripts` installation. It does not use your personal browser session. Generated HTML stays inside the preview's opaque-origin iframe; requests are limited to that ephemeral preview, downloads/service workers are disabled and arbitrary navigation/evaluation is not exposed. A Windows Job Object owns the process tree, with a 1 GiB committed-memory cap, a 30-second outer deadline and bounded output. The Chrome renderer sandbox stays enabled. This is static project checking, not unrestricted browsing or an OS/container guarantee.
+
+Assignments need the normal identity, mission and head grants. A mission can independently require saved-file checks, for example:
+
+```json
+{
+  "allowed_capabilities": ["draft_artifact", "browser_sandbox"],
+  "browser_checks": [{
+    "path": "engineering/index.html",
+    "checks": [{"selector": "h1", "contains": "Shop"}, {"selector": "#menu", "action": "click"}]
+  }]
+}
+```
+
+This is a fragment to add to a complete mission contract. Checks support click/fill, contains/equals text, visibility and element count. Observed failed checks override a positive model review and participate in the existing bounded repair path. Browser execution evidence is cached against exact saved inputs; a human preview alone is not such evidence.
+
+`python_sandbox` and `node_build_sandbox` have fixed offline Docker profiles. They require a local Linux Docker engine and operator-supplied digest-pinned images in `COLLECTIVE101_PYTHON_IMAGE` / `COLLECTIVE101_NODE_IMAGE`. Docker is not installed on the current machine, so these adapters report unavailable; real container execution has not been verified. There is no host-code fallback or automatic image pull. The Node image must already contain project dependencies, optionally at `/opt/collective101/node_modules`; builds use offline npm and return bounded text output. The initial Python profile runs an isolated standard-library entry script. These profiles do not provide general full-stack hosting or install dependencies from the network.
+
+Container commands drop capabilities, run as UID 65534, disable networking, use a read-only root/input, bound memory/CPU/processes/tmp space and clean their uniquely named container after success/failure/timeout. Only supplied text files enter a temporary workspace; host/project files, API keys, Docker sockets and user-selected commands are not mounted. Python acceptance may declare `runtime_checks` with profile `python`, a `.py` path and exact `expected_stdout`; offline Node checks use profile `node_build` and a `package.json` path. The relevant sandbox capability is required. Runtime readiness is configuration presence, not proof that the image/daemon/build works.
+
+### Search response recovery
+
+The recorded Bukit Jalil failure occurred before any Brave request: research returned two answers that failed JSON parsing, with zero tool calls recorded. Rejected raw content was not retained, so its exact form cannot be reconstructed. Muse requests now use Meta's documented JSON-schema output mode for structured responses; native legacy function-call requests keep their existing protocol. Blank answers are retryable `empty_output` provider failures with usage retained. Non-JSON responses get actionable JSON/tool-request feedback and bounded shape/position/digest diagnostics, without saving raw rejected text. BOM/JSON fences are handled; partial JSON and prose surrounding JSON remain rejected. Retries/budgets were not enlarged and old failed chats are not automatically replayed. See [Meta structured output](https://dev.meta.ai/docs/cookbook/structured-output).
+
+### CLI evaluation compatibility
 
 After configuring the live model, run from this Desktop project:
 

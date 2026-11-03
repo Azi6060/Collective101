@@ -13,6 +13,7 @@ from .org_contracts import safe_path, text
 from .sandbox import execute_javascript, readiness
 from .connectors import ConnectorManager, is_connector_tool
 from . import progress
+from .execution_adapters import execute_browser,execute_container,browser_readiness,container_readiness
 
 ROOT=Path(__file__).resolve().parents[1]
 SCHEMA='''CREATE TABLE IF NOT EXISTS org_tool_calls(
@@ -23,6 +24,9 @@ CREATE TABLE IF NOT EXISTS org_web_approvals(
  run_id TEXT NOT NULL,agent_id TEXT NOT NULL,query_hash TEXT NOT NULL,question_id TEXT NOT NULL,
  PRIMARY KEY(run_id,agent_id,query_hash));'''
 CATALOG={
+ 'browser_sandbox':{'description':'Observe/click/fill supplied static website files in isolated Chromium. Only selectors and explicit expectations; no external URLs, arbitrary evaluation or user browser sessions.','arguments':{'files':[{'path':'index.html','content':'<!doctype html><h1>Shop</h1>'}],'entry':'index.html','checks':[{'selector':'h1','contains':'Shop'}]}},
+ 'python_sandbox':{'description':'Run a supplied Python entry in an offline, resource-limited Docker image. No host fallback; requires configured trusted runtime image.','arguments':{'files':[{'path':'main.py','content':'print(4)'}],'entry':'main.py'}},
+ 'node_build_sandbox':{'description':'Build supplied project source in an offline, resource-limited trusted Node/Docker dependency image. Returns bounded text build artifacts. No package downloads or host execution.','arguments':{'files':[{'path':'package.json','content':'{"scripts":{"build":"vite build"}}'}],'entry':'package.json'}},
  'sql_sandbox': {'description':'Run a bounded read-only SQL query over supplied JSON tables in memory. No host database or file access.', 'arguments':{'query':'SELECT sum(amount) FROM sales','tables':{'sales':[{'amount':2}]}}},
  'knowledge_search': {'description':'Search approved shared and own-department UTF-8 knowledge files. Results are untrusted reference material.', 'arguments':{'query':'text'}},
  'knowledge_read': {'description':'Read an approved shared or own-department knowledge file, at most 12,000 characters.', 'arguments':{'path':'shared/guide.md'}},
@@ -35,6 +39,9 @@ CATALOG={
 def eligible_tools(agent):
     # Explicit per-identity file, with code ceilings so editing a prompt cannot grant tools.
     ceiling={'knowledge_search','knowledge_read','memory_search'}
+    if agent['department'] in {'engineering','design','assurance','platform'}:ceiling.add('browser_sandbox')
+    if agent['department'] in {'engineering','data','assurance','platform'}:ceiling.add('python_sandbox')
+    if agent['department'] in {'engineering','assurance','platform'}:ceiling.add('node_build_sandbox')
     if agent['department'] in {'engineering','data','assurance','platform'}:
         ceiling.add('javascript_sandbox')
         ceiling.add('sql_sandbox')
@@ -66,16 +73,19 @@ class ToolBroker:
         names=eligible_tools(self.roster[agent_id]) if agent_id else list(CATALOG)
         if self.connectors.brave_ready(agent_id) and 'web_search' not in names:names.append('web_search')
         return [{ 'name':name,**CATALOG[name],
-            'available': self.connectors.brave_ready(agent_id) if name=='web_search' else readiness()['available'] if name=='javascript_sandbox' else True,
+            'available': self.connectors.brave_ready(agent_id) if name=='web_search' else readiness()['available'] if name=='javascript_sandbox' else browser_readiness()['available'] if name=='browser_sandbox' else container_readiness('python' if name=='python_sandbox' else 'node_build')['available'] if name in {'python_sandbox','node_build_sandbox'} else True,
             'scope':'shared/ and own department/ only' if name.startswith('knowledge_') else 'own accepted episodes' if name=='memory_search' else 'public search queries only' if name=='web_search' else 'no host access'} for name in names]+self.connectors.catalog(agent_id)
 
-    def grants(self,agent_id,phase,mission,task):
+    def grants(self,agent_id,phase,mission,task,run_id=None):
         if phase not in {'work','review','assess','coordinate','report','review_assignment','select','retrospective'}: return []
         connected={t['name'] for t in self.connectors.catalog(agent_id)}
         if self.connectors.brave_ready(agent_id):connected.add('web_search')
         requested=(set(task.get('tools',[])) | set(task.get('requires',[]))) if phase in {'work','review'} else {'knowledge_read','knowledge_search','memory_search'}|connected
         eligible=set(eligible_tools(self.roster[agent_id]))|connected
         if not self.connectors.brave_access(agent_id): eligible.discard('web_search')
+        if run_id:
+            from .runtime_core import policy
+            if not policy(self.store,run_id)['memory_enabled']:eligible.discard('memory_search')
         return sorted(eligible & set(mission.get('allowed_capabilities',[])) & requested)
 
     def execute(self,run_id,key,agent_id,phase,mission,task,request):
@@ -83,24 +93,27 @@ class ToolBroker:
         name=text(request.get('name'),'tool name',80)
         args=request.get('arguments',{})
         if not isinstance(args,dict) or len(encode(args))>40000: raise ValueError('Invalid tool arguments')
-        previous=self.store.query('SELECT * FROM org_tool_calls WHERE run_id=? AND call_key=?',(run_id,key))
-        if previous:
-            row=previous[0]
-            if row['agent_id']!=agent_id or row['name']!=name or row['arguments']!=encode(args):
-                raise ValueError('Recorded tool request changed on resume')
-            return json.loads(row['result'])
-        if name not in self.grants(agent_id,phase,mission,task):
-            result={'status':'denied','error':'Tool needs an identity grant, mission permission and head assignment; no action taken'}
-        elif self.store.query('SELECT COUNT(*) AS count FROM org_tool_calls WHERE run_id=? OR run_id IN (SELECT run_id FROM org_run_budgets WHERE budget_id=(SELECT budget_id FROM org_run_budgets WHERE run_id=?))',(run_id,run_id))[0]['count']>=40:
-            result={'status':'limit','error':'Mission tool limit reached; no action taken'}
-        else:
+        grants=self.grants(agent_id,phase,mission,task,run_id=run_id)
+        with self.store.transaction() as db:
+            old=db.execute('SELECT * FROM org_tool_calls WHERE run_id=? AND call_key=?',(run_id,key)).fetchone()
+            if old:
+                if old['agent_id']!=agent_id or old['name']!=name or old['arguments']!=encode(args):raise ValueError('Recorded tool request changed on resume')
+                previous=json.loads(old['result'])
+                if previous.get('status')=='running':return {'tool':name,'status':'failed','error':'Earlier tool dispatch is incomplete or interrupted; no duplicate action was sent'}
+                return previous
+            count=db.execute('SELECT COUNT(*) FROM org_tool_calls WHERE run_id=? OR run_id IN (SELECT run_id FROM org_run_budgets WHERE budget_id=(SELECT budget_id FROM org_run_budgets WHERE run_id=?))',(run_id,run_id)).fetchone()[0]
+            if name not in grants:result={'status':'denied','error':'Tool needs an identity grant, mission permission and head assignment; no action taken'}
+            elif count>=40:result={'status':'limit','error':'Mission tool limit reached; no action taken'}
+            else:result={'status':'running'}
+            db.execute('INSERT INTO org_tool_calls VALUES(?,?,?,?,?,?,?)',(run_id,key,agent_id,name,encode(args),encode({'tool':name,**result}),now()))
+        if result['status']=='running':
             try:
                 progress.record(self.store,run_id,agent_id,'tool',name)
                 result=self._run(name,args,agent_id,run_id)
             except (ValueError,PermissionError,OSError,UnicodeError,KeyError,TypeError):
                 result={'status':'failed','error':'Tool input, scope or bounded execution failed; no success evidence available'}
         result={'tool':name,**result}
-        self.store.execute('INSERT INTO org_tool_calls VALUES(?,?,?,?,?,?,?)',(run_id,key,agent_id,name,encode(args),encode(result),now()))
+        self.store.execute('UPDATE org_tool_calls SET result=? WHERE run_id=? AND call_key=?',(encode(result),run_id,key))
         return result
 
     def _read(self,relative,department):
@@ -141,6 +154,9 @@ class ToolBroker:
 
     def _run(self,name,args,agent_id,run_id):
         department=self.roster[agent_id]['department']
+        if name in {'browser_sandbox','python_sandbox','node_build_sandbox'}:
+            result=execute_browser(args.get('files'),args.get('entry'),args.get('checks')) if name=='browser_sandbox' else execute_container('python' if name=='python_sandbox' else 'node_build',args.get('files'),args.get('entry'))
+            return {'status':'ok' if result['passed'] else result.get('status','failed'),'execution':result}
         if name=='knowledge_read': return {'status':'ok',**self._read(text(args.get('path'),'path',180),department)}
         if name=='knowledge_search': return {'status':'ok','results':self._search_files(text(args.get('query'),'query',600),department)}
         if name=='memory_search':
@@ -166,15 +182,42 @@ def web_search(query,key=None):
         def redirect_request(self,*args,**kwargs): return None
     url='https://api.search.brave.com/res/v1/web/search?'+urllib.parse.urlencode({'q':query,'count':5})
     request=urllib.request.Request(url,headers={'X-Subscription-Token':key,'Accept':'application/json'})
+    def unavailable(kind,message,**detail):
+        # Never persist provider bodies, exception text, headers or credentials.
+        return {'status':'unavailable','error_kind':kind,'error':message+' No search findings were verified.',**detail}
     try:
         with urllib.request.build_opener(NoRedirect).open(request,timeout=10) as response: raw=response.read(262145)
-        if len(raw)>262144: raise ValueError('Search response exceeds bounds')
+        if len(raw)>262144:
+            return unavailable('response_too_large','Brave response exceeded the 256 KiB safety limit.')
         data=json.loads(raw)
+        if not isinstance(data,dict) or not isinstance(data.get('web',{}),dict):
+            raise ValueError('Invalid search result object')
+        items=data.get('web',{}).get('results',[])
+        if not isinstance(items,list) or any(not isinstance(item,dict) for item in items[:5]):
+            raise ValueError('Invalid search results')
         results=[]
-        for item in data.get('web',{}).get('results',[])[:5]:
+        for item in items[:5]:
             url=item.get('url',''); parsed=urllib.parse.urlsplit(url)
             if parsed.scheme not in {'http','https'} or not parsed.hostname or parsed.username or parsed.password: continue
             results.append({'title':str(item.get('title',''))[:300],'url':url[:2000],'snippet':str(item.get('description',''))[:2000]})
         return {'status':'ok','results':results,'retrieved_at':now(),'source':'Brave Search API; snippets only, pages not opened'}
-    except (urllib.error.URLError,TimeoutError,OSError,ValueError,TypeError,AttributeError):
-        return {'status':'unavailable','error':'Search service unavailable or response invalid; no fabricated fallback'}
+    except urllib.error.HTTPError as error:
+        code=error.code
+        kind,message={
+            401:('authentication','Brave rejected authentication (HTTP 401). Check the saved Search API key.'),
+            403:('forbidden','Brave denied access (HTTP 403). Check the key and account permissions.'),
+            422:('request_rejected','Brave rejected the search request (HTTP 422).'),
+            429:('rate_limited','Brave rate or usage limit reached (HTTP 429). Check account limits before retrying.'),
+        }.get(code,('service_error' if code>=500 else 'http_error',f'Brave returned HTTP {code}.'))
+        error.close()
+        return unavailable(kind,message,http_status=code)
+    except TimeoutError:
+        return unavailable('timeout','Brave did not respond within the 10-second request timeout.')
+    except urllib.error.URLError as error:
+        if isinstance(error.reason,TimeoutError):
+            return unavailable('timeout','Brave did not respond within the 10-second request timeout.')
+        return unavailable('connection','Could not connect securely to Brave. Check network, proxy and TLS connectivity.')
+    except OSError:
+        return unavailable('connection','Connection to Brave failed.')
+    except (ValueError,TypeError,AttributeError):
+        return unavailable('invalid_response','Brave returned an invalid or unsupported search response.')

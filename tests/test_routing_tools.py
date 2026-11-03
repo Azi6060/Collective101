@@ -206,6 +206,7 @@ class IntegratedPolicyTests(ConsoleCase):
         mission=json.loads((ROOT/'examples/research-mission.json').read_text())
         mission['departments']=['research']
         mission['artifact_checks']=[c for c in mission['artifact_checks'] if c['path'].startswith('research/')]
+        mission['delivery_type']='document';mission['deliverables']=[{'path':mission['artifact_checks'][0]['path'],'kind':'document'}]
         if allow_web: mission['allowed_capabilities'].append('web_search')
         class Provider(DepartmentFixtureProvider):
             def complete(self,messages,tools=None):

@@ -36,6 +36,13 @@ def safe_path(value):
     return value
 
 
+def department_path(value,department):
+    """Accept either a relative file or the same department's qualified path."""
+    path=safe_path(value)
+    prefix=department+'/'
+    return safe_path(path[len(prefix):]) if path.startswith(prefix) else path
+
+
 def mission_contract(value):
     if not isinstance(value, dict):
         raise ValueError("Mission must be an object")
@@ -50,7 +57,7 @@ def mission_contract(value):
     if len(json.dumps(value.get("inputs", {}))) > 40000:
         raise ValueError("Mission inputs exceed the 40,000-character limit")
     allowed = strings(value.get("allowed_capabilities", ["draft_artifact"]), "allowed_capabilities")
-    if any(c not in {"draft_artifact", "javascript_sandbox", "sql_sandbox", "knowledge_read", "knowledge_search", "memory_search", "web_search"} and not is_connector_tool(c) for c in allowed):
+    if any(c not in {"draft_artifact", "javascript_sandbox", "sql_sandbox", "browser_sandbox", "python_sandbox", "node_build_sandbox", "knowledge_read", "knowledge_search", "memory_search", "web_search"} and not is_connector_tool(c) for c in allowed):
         raise ValueError("Unknown executable capability")
     checks = value.get("artifact_checks", [])
     if not isinstance(checks, list) or len(checks) > 32:
@@ -91,15 +98,49 @@ def mission_contract(value):
         if isinstance(expected, (int, float)) and not math.isfinite(expected):
             raise ValueError("Expected number must be finite")
     departments = strings(value.get("departments", list(DEPARTMENT_MAP)), "departments", 10)
+    browser_checks=value.get('browser_checks',[]);runtime_checks=value.get('runtime_checks',[])
+    if not isinstance(browser_checks,list) or len(browser_checks)>3:raise ValueError('At most three saved-page browser check groups are allowed')
+    if browser_checks and 'browser_sandbox' not in allowed:raise ValueError('Browser checks require explicit browser_sandbox permission')
+    from .execution_adapters import validate_browser_checks
+    for check in browser_checks:
+        if not isinstance(check,dict):raise ValueError('Browser check must be an object')
+        safe_path(check.get('path'))
+        if not check['path'].endswith('.html'):raise ValueError('Browser acceptance requires an HTML artifact')
+        validate_browser_checks(check.get('checks'))
+    if not isinstance(runtime_checks,list) or len(runtime_checks)>3:raise ValueError('At most three isolated runtime check groups are allowed')
+    for check in runtime_checks:
+        if not isinstance(check,dict) or check.get('profile') not in {'python','node_build'}:raise ValueError('Runtime profile must be python or node_build')
+        profile=check['profile'];required='python_sandbox' if profile=='python' else 'node_build_sandbox'
+        if required not in allowed:raise ValueError('Runtime checks require explicit '+required+' permission')
+        safe_path(check.get('path'))
+        if profile=='python' and (not check['path'].endswith('.py') or not isinstance(check.get('expected_stdout'),str) or len(check['expected_stdout'])>4000):raise ValueError('Python checks need a .py entry and bounded expected_stdout (which may be empty)')
+        if profile=='node_build' and not check['path'].endswith('/package.json'):raise ValueError('Build check needs a package.json artifact')
+    keys=[('browser',c['path']) for c in browser_checks]+[(c['profile'],c['path']) for c in runtime_checks]
+    if len(keys)!=len(set(keys)):raise ValueError('Combine repeated runtime checks for the same entry')
     repair_rounds=value.get('max_repair_rounds',1)
     if type(repair_rounds) is not int or not 0<=repair_rounds<=2:
         raise ValueError('max_repair_rounds must be 0 to 2')
     if not departments or set(departments) - set(DEPARTMENT_MAP):
         raise ValueError("Select at least one registered department")
+    delivery_type=value.get('delivery_type','generic')
+    if value.get('title') is not None:text(value['title'],'chat title',80)
+    if delivery_type not in {'website','code','document','analysis','generic'}:raise ValueError('Invalid delivery_type')
+    deliverables=value.get('deliverables',[])
+    if not isinstance(deliverables,list) or len(deliverables)>16:raise ValueError('At most 16 declared deliverables are allowed')
+    paths=set()
+    for item in deliverables:
+        if not isinstance(item,dict) or item.get('kind') not in {'html','code','document'}:raise ValueError('Invalid deliverable')
+        path=safe_path(item.get('path'));owner=path.split('/')[0]
+        if owner not in departments or '/' not in path:raise ValueError('Every deliverable needs a selected department owner')
+        if path.casefold() in paths:raise ValueError('Duplicate deliverable path')
+        paths.add(path.casefold())
+        if item['kind']=='html' and not path.endswith('.html'):raise ValueError('HTML deliverable requires an HTML file')
+    if delivery_type=='website' and ('engineering' not in departments or not any(d['kind']=='html' and d['path'].startswith('engineering/') for d in deliverables)):
+        raise ValueError('Website delivery requires Engineering and an engineering-owned HTML source deliverable')
     return {"departments": departments, "objective": value["objective"], "inputs": value.get("inputs", {}),
             "constraints": value.get("constraints", []), "acceptance_criteria": criteria,
             "allowed_capabilities": allowed, "artifact_checks": checks, "execution_checks": execution,
-            "max_repair_rounds":repair_rounds,"data_checks":data_checks}
+            "max_repair_rounds":repair_rounds,"data_checks":data_checks,'browser_checks':browser_checks,'runtime_checks':runtime_checks,'delivery_type':delivery_type,'deliverables':deliverables,'title':value.get('title')}
 
 
 def proposal(value, department, roster):
@@ -134,6 +175,8 @@ def proposal(value, department, roster):
         outputs = strings(task.get("outputs"), "task outputs", 4)
         if not outputs:
             raise ValueError("Task must declare output files")
+        outputs=[department_path(path,department) for path in outputs]
+        task['outputs']=outputs
         for path in outputs:
             safe_path(path)
             normalized = path.casefold()
@@ -170,7 +213,7 @@ def selection(value, proposals):
     return value
 
 
-def worker_result(value, task):
+def worker_result(value, task, department=None):
     if value.get("status") not in ("produced", "blocked"):
         raise ValueError("Worker status must be produced or blocked")
     text(value.get("summary"), "worker summary", 4000)
@@ -180,7 +223,11 @@ def worker_result(value, task):
     if not isinstance(artifacts, list) or len(artifacts) > 4:
         raise ValueError("Invalid artifacts")
     if value["status"] == "blocked" and artifacts:
-        raise ValueError("Blocked workers cannot publish completed artifacts")
+        raise ValueError('Blocked workers cannot publish completed artifacts. Keep status blocked and return artifacts=[]; explain the missing evidence in summary, limitations and capability_requests. Do not change status to produced unless the assignment is actually complete.')
+    if department:
+        for artifact in artifacts:
+            if not isinstance(artifact,dict):raise ValueError('Artifact must be an object')
+            artifact['path']=department_path(artifact.get('path'),department)
     if value["status"] == "produced" and {a.get("path") for a in artifacts if isinstance(a, dict)} != set(task["outputs"]):
         raise ValueError("Worker must provide exactly the assigned outputs")
     paths = []
@@ -188,7 +235,7 @@ def worker_result(value, task):
         if not isinstance(artifact, dict):
             raise ValueError("Artifact must be an object")
         safe_path(artifact.get("path"))
-        text(artifact.get("content"), "artifact content", 20000)
+        text(artifact.get("content"), "artifact content", 80000)
         paths.append(artifact["path"])
     if len(set(paths)) != len(paths):
         raise ValueError("Duplicate artifact paths")
@@ -223,6 +270,7 @@ def review(value, criteria):
 
 def retrospective(value):
     text(value.get("summary"), "director summary", 6000)
+    if 'user_summary' in value:text(value['user_summary'],'user-facing summary',4000)
     improvements = value.get("improvements")
     if not isinstance(improvements, list) or len(improvements) > 8:
         raise ValueError("Invalid improvements")

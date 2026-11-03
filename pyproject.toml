@@ -16,4 +16,4 @@ collective101 = "collective101.cli:main"
 include = ["collective101*"]
 
 [tool.setuptools.package-data]
-collective101 = ["departments/*/*.json", "web/*", "web/vendor/*", "execution/*.mjs"]
+collective101 = ["departments/*/*.json", "web/*", "web/vendor/*", "web/preview/*", "execution/*.mjs", "execution/*_container.py"]

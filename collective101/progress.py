@@ -17,5 +17,5 @@ def current(store,run_id,roster):
     rows=store.query('SELECT * FROM org_progress WHERE run_id=?',(run_id,))
     if not rows:return {'label':'Preparing the mission','phase':'queued'}
     row=rows[0];name=roster.get(row['agent_id'],{}).get('name','Organization')
-    label='Using '+row['detail'] if row['phase']=='tool' else LABELS.get(row['phase'],'Working')
+    label='Using '+row['detail'] if row['phase']=='tool' else row['detail'] if row['phase'] in {'work','retry'} and row['detail'] else LABELS.get(row['phase'],'Working')
     return {'label':name+' · '+label,'agent_id':row['agent_id'],'phase':row['phase'],'updated_at':row['updated_at']}

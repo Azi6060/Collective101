@@ -1,5 +1,6 @@
 """Evidence-based memory and responsibility, separated from tool permissions."""
-import hashlib,json,re
+import hashlib,json,re,uuid
+from datetime import datetime,timedelta,timezone
 from .store import encode,now
 
 SCHEMA='''CREATE TABLE IF NOT EXISTS org_memory_cards(
@@ -8,7 +9,38 @@ SCHEMA='''CREATE TABLE IF NOT EXISTS org_memory_cards(
 CREATE TABLE IF NOT EXISTS org_contribution_evidence(
  root_id TEXT NOT NULL,agent_id TEXT NOT NULL,provider TEXT NOT NULL,objective_hash TEXT NOT NULL,
  accepted INTEGER NOT NULL,checked INTEGER NOT NULL,live INTEGER NOT NULL,repaired INTEGER NOT NULL,
- evidence_run TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(root_id,agent_id));'''
+ evidence_run TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(root_id,agent_id));
+CREATE TABLE IF NOT EXISTS org_lessons(
+ id TEXT PRIMARY KEY,agent_id TEXT NOT NULL,provider TEXT NOT NULL,evidence_run TEXT NOT NULL,
+ situation TEXT NOT NULL,action TEXT NOT NULL,outcome TEXT NOT NULL,limitations TEXT NOT NULL,
+ status TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS org_lesson_reviews(
+ id TEXT PRIMARY KEY,lesson_id TEXT NOT NULL,accepted INTEGER NOT NULL,note TEXT NOT NULL,created_at TEXT NOT NULL);'''
+
+def propose_lesson(store,agent,provider,run_id,situation,action,outcome,limitations):
+    from .org_contracts import text
+    for value,label in [(situation,'situation'),(action,'action'),(outcome,'outcome'),(limitations,'limitations')]:text(value,label,2000)
+    runs=store.query('SELECT provider,status FROM org_runs WHERE id=?',(run_id,))
+    owns=store.query('SELECT agent_id FROM org_artifacts WHERE run_id=? AND agent_id=? UNION SELECT agent_id FROM org_calls WHERE run_id=? AND agent_id=? AND status IN (\'accepted\',\'failed\')',(run_id,agent,run_id,agent))
+    if not runs or runs[0]['provider']!=provider or not owns or runs[0]['status'] not in {'reviewed','blocked'}:raise ValueError('Lesson needs the same agent/provider and recorded completed or failed source evidence')
+    id='lesson_'+uuid.uuid4().hex[:12];created=now();expires=(datetime.now(timezone.utc)+timedelta(days=90)).isoformat()
+    store.execute('INSERT INTO org_lessons VALUES(?,?,?,?,?,?,?,?,?,?,?)',(id,agent,provider,run_id,situation,action,outcome,limitations,'proposed',created,expires))
+    return store.query('SELECT * FROM org_lessons WHERE id=?',(id,))[0]
+
+def review_lesson(store,id,accepted,note):
+    if type(accepted) is not bool or not isinstance(note,str) or not 1<=len(note.strip())<=2000:raise ValueError('Lesson review requires a verdict and an evidence note')
+    if not store.query('SELECT id FROM org_lessons WHERE id=?',(id,)):raise ValueError('Unknown lesson')
+    with store.transaction() as db:
+        db.execute('INSERT INTO org_lesson_reviews VALUES(?,?,?,?,?)',('lesson_review_'+uuid.uuid4().hex[:12],id,int(accepted),note.strip(),now()))
+        db.execute('UPDATE org_lessons SET status=? WHERE id=?',('approved' if accepted else 'rejected',id))
+    return store.query('SELECT * FROM org_lessons WHERE id=?',(id,))[0]
+
+def recall_lessons(store,agent,provider,query):
+    terms=set(re.findall(r'\w{3,}',query.lower()));ranked=[]
+    for row in store.query("SELECT * FROM org_lessons WHERE agent_id=? AND provider=? AND status='approved' AND expires_at>? ORDER BY created_at DESC LIMIT 100",(agent,provider,now())):
+        score=len(terms&set(re.findall(r'\w{3,}',row['situation'].lower())))
+        if score:ranked.append((score,{**row,'kind':'reviewed_lesson_not_policy','learning_claim':'Human-reviewed reference; benefit requires held-out evaluation'}))
+    return [row for _,row in sorted(ranked,key=lambda item:-item[0])[:3]]
 
 def consolidate(store,agent,provider,content,run_id):
     data=json.loads(content)

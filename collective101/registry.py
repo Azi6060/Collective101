@@ -68,7 +68,7 @@ def build_roster(root=None) -> list[dict]:
         if not agent["responsibilities"]:
             raise ValueError("Each agent needs explicit responsibilities")
         declared=agent.get('tool_allowlist',[])
-        if not isinstance(declared,list) or len(set(declared))!=len(declared) or any(t not in {'knowledge_read','knowledge_search','memory_search','web_search','javascript_sandbox','sql_sandbox'} for t in declared):
+        if not isinstance(declared,list) or len(set(declared))!=len(declared) or any(t not in {'knowledge_read','knowledge_search','memory_search','web_search','javascript_sandbox','sql_sandbox','browser_sandbox','python_sandbox','node_build_sandbox'} for t in declared):
             raise ValueError('Invalid agent tool allowlist')
         agents.append(agent)
     expected = {"director-001"} | {f"{d.id}-{i:03}" for d in DEPARTMENTS for i in range(1, d.count + 1)}

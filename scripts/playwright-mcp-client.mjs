@@ -21,13 +21,14 @@ export async function waitUntil(browser,fn,label='browser condition',timeout=300
 export async function waitReady(browser) {
   await waitUntil(browser,()=>document.documentElement.dataset.ready==='true','app readiness');
 }
-export async function connectBrowser(origin='http://127.0.0.1:8765') {
+export async function connectBrowser(origin='http://127.0.0.1:8765',options={}) {
   const url=new URL(origin);
   if(url.protocol!=='http:'||!['127.0.0.1','localhost'].includes(url.hostname))throw new Error('Browser test target must be this local workspace');
+  if(options.allowLoopbackPreviews&&process.env.COLLECTIVE101_ISOLATED_TEST!=='1')throw new Error('Dynamic preview ports are allowed only in the isolated test harness');
   const env=Object.fromEntries(['PATH','SYSTEMROOT','WINDIR','TEMP','TMP','LOCALAPPDATA'].filter(k=>process.env[k]).map(k=>[k,process.env[k]]));
   const transport=new StdioClientTransport({command:process.execPath,cwd:root,env,stderr:'pipe',args:[
     path.join(root,'node_modules/@playwright/mcp/cli.js'),'--browser','chrome','--headless','--isolated','--sandbox',
-    '--block-service-workers','--no-webmcp','--ignore-roots','--allowed-origins',url.origin,
+    '--block-service-workers','--no-webmcp','--ignore-roots','--allowed-origins',options.allowLoopbackPreviews?url.origin+';http://127.0.0.1:*':url.origin,
     '--output-dir',path.join(root,'work/playwright'),'--viewport-size','1440x1000']});
   let stderr='';transport.stderr?.on('data',chunk=>{stderr=(stderr+chunk.toString()).slice(-4000);});
   const client=new Client({name:'collective101-browser-testing',version:'1.0.0'},{capabilities:{}});
