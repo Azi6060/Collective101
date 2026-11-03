@@ -24,6 +24,9 @@ Open **http://127.0.0.1:8765**. `Start Collective101.cmd` is a double-click laun
 - **Mission chat:** describe the outcome, answer clarification questions, inspect the brief, and start the organization. Live chat requires a configured model; credentials can be saved in Connectors.
 - **Connectors:** browse a searchable card catalog. Gmail, Slack, Canva, GitHub, Google Drive and Google Calendar are clearly marked Coming soon. Set up the live model, Web search or Custom MCP from their cards; enabled tools are shared with all 101 agents.
 - **Activity & evidence:** agent actions and status, leadership messages, artifact contents/downloads, and actual sandbox results. Filter by agent and mission. The page polls persisted state every 1.5 seconds; it does not display hidden model reasoning.
+- **Settings (`/settings`):** Light, Dark or System appearance; 14 interface languages; larger text; reduced motion; and reset to defaults. **English is the default**, including after reset, regardless of your device language. Available languages: English, Simplified Chinese, Spanish, Hindi, Arabic, French, Portuguese, Russian, Bengali, German, Japanese, Korean, Indonesian and Malay. Arabic uses a mirrored right-to-left layout. Navigation, preferences and common chat controls are translated; other untranslated labels fall back to English. Changes apply immediately and persist in this browser for this app address. If storage is unavailable they apply for the current visit. Agent replies, role definitions and mission evidence retain their original language. Model credentials stay in Connectors.
+
+The slate-and-teal workspace keeps **New mission** in the desktop sidebar and a labeled plus button in the mobile header. Empty chat suggestions fill the composer for you to review; they do not send messages automatically. Theme controls support arrow keys, all settings have labels and focus indicators, and device reduced-motion preferences remain respected even when the app toggle is off. See [verification history](VERIFICATION.md) for the limits of automated layout, contrast and accessibility checks.
 
 Every chat message, including "Hi", goes to **Head of Distribution (`distribution-001`)** through the configured live model. The agent chooses a direct reply, a contextual clarification, or a mission with relevant departments. There are no canned greetings, keyword/length question rules or demo run option in chat. Missing configuration or provider failure produces an error, never a scripted fallback. Historical demo chats remain on disk but are hidden from normal chat history.
 
@@ -150,6 +153,8 @@ npm.cmd run test:sandbox
 npm.cmd run test:ui
 # Real Chrome through Playwright MCP, disposable state and scripted model:
 npm.cmd run test:browser
+# Optional focused run, still using the isolated scripted-provider service:
+npm.cmd run test:browser -- --test-name-pattern=settings
 # Read-only page inspection of the running app on port 8765:
 npm.cmd run browser:inspect
 ```

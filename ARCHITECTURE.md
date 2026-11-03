@@ -1,5 +1,13 @@
 # Collective 101 architecture
 
+## Frontend presentation and preferences (3 November 2026)
+
+The existing HTML/vanilla-JavaScript application remains the product UI. `app.css` owns its base layout and workflow components; `workspace.css` owns semantic color tokens, light/dark presentation, responsive refinements and Settings. `preferences.js` loads before `app.js`, validates a versioned browser-local presentation record, follows the system color scheme when selected, and applies language, text-size and motion preferences. Storage failure keeps the app usable with visit-only preferences. No preference grants tools, changes budgets, configures a model or touches mission data. The backend serves `/settings` and the two static assets through its explicit route allowlist.
+
+The design contract uses a slate navigation rail, teal primary actions, quiet network decoration and readable content surfaces. Starting a mission stays available from every view. Empty chat offers draft-only starting points; actual replies and clarification remain provider-authored. Desktop uses the existing fixed sidebar; mobile uses compact navigation above the workspace, with a docked chat composer sized from remaining viewport space. Settings uses native radio/select/checkbox controls and a noninteractive theme preview. Color is reinforced by text, selected-state checks and current-page semantics.
+
+Translation covers navigation, preferences and common chat controls in English, Simplified Chinese, Spanish, Hindi, Arabic, French, Portuguese, Russian, Bengali, German, Japanese, Korean, Indonesian and Malay. `locales.js` loads before preferences and exposes native language names and validated translation rows; the existing fuller Malay catalog is retained. English is always the initial/reset/invalid-setting fallback, with no device-language detection. An explicitly saved supported choice persists. Missing labels fall back to their English source text. Static labels are captured from trusted application HTML; dynamic chrome uses the same translation catalog. Arabic sets document direction to RTL and mirrors the shell, while message bodies and evidence use independent automatic direction. Agent messages, role prompts, artifacts and evidence are not translated or rewritten. Display preferences persist per browser origin, rather than as organization-wide policy. Browser checks interact only with disposable test state; their DOM/layout inspection never reads browser storage or credentials.
+
 The living roadmap is [PROJECT_STATUS.md](PROJECT_STATUS.md). This document records implementation decisions and their consequences.
 
 ## Decision: individual definitions, shared execution
