@@ -122,7 +122,7 @@ function navigate(view,push=true){if(view!=='chat')cancelVoiceRecording();state.
 function newMission(){cancelVoiceRecording();$('mission-input').value='';growComposer();state.chat=null;state.chatSignature='';state.pendingRequest=null;state.selectedAgent=null;clearPendingAttachments();inspectorChat=null;$('chat-inspector').open=false;document.body.classList.remove('inspector-open');sessionStorage.removeItem('collective-chat');renderChat();navigate('chat');$('mission-input').focus();}
 function prettyAgent(id){return state.roster?.agents.find(agent=>agent.id===id)?.name||id;}
 function modelSource(config){return !config?'Configuration source unavailable until server restart':config.credential_source==='environment'?'Server environment':config.credential_source==='saved_connector'?'Saved connector':'No credential detected';}
-function requiresRestart(){return !!state.health&&(!state.health.features?.chat_workspace||!state.health.features?.unlimited_spending||!state.health.features?.attachments||!state.health.features?.agent_chat||!state.health.features?.media_previews);}
+function requiresRestart(){return !!state.health&&(!state.health.features?.chat_workspace||!state.health.features?.unlimited_spending||!state.health.features?.attachments||!state.health.features?.agent_chat||!state.health.features?.media_previews||!state.health.features?.structured_output);}
 function renderHealth(){
   const h=state.health,c=h.model_configuration;
   $('connection-status').textContent='Workspace connected · '+(h.version||'older server');

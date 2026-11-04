@@ -27,7 +27,7 @@ def response(content, tokens=31):
 
 class SearchResponseRegressions(unittest.TestCase):
     def test_muse_requests_constrain_json_without_changing_native_legacy_tool_protocol(self):
-        provider=MetaProvider(api_key='test-placeholder-not-a-key')
+        provider=MetaProvider(api_key='test-placeholder-not-a-key',structured_transport='schema')
         with patch('collective101.provider.urllib.request.build_opener') as opener:
             opener.return_value.open.return_value=response('{"action":"reply","answer":"hi"}')
             provider.complete([{'role':'user','content':'Return a JSON reply'}])
@@ -35,7 +35,7 @@ class SearchResponseRegressions(unittest.TestCase):
         self.assertEqual(payload['response_format']['type'],'json_schema')
         self.assertEqual(payload['response_format']['json_schema']['schema']['type'],'object')
     def test_empty_model_completion_is_retryable_provider_failure_with_usage(self):
-        provider=MetaProvider(api_key='test-placeholder-not-a-key')
+        provider=MetaProvider(api_key='test-placeholder-not-a-key',structured_transport='schema')
         with patch('collective101.provider.urllib.request.build_opener') as opener:
             opener.return_value.open.return_value=response('',tokens=47)
             with self.assertRaises(ProviderError) as failure:
@@ -66,7 +66,7 @@ class SearchResponseRegressions(unittest.TestCase):
     def test_malformed_work_records_bounded_response_shape_instead_of_raw_model_text(self):
         parent=ROOT/'work'/'search-response-regressions';parent.mkdir(parents=True,exist_ok=True)
         with tempfile.TemporaryDirectory(dir=parent) as temporary:
-            provider=MetaProvider(api_key='test-placeholder-not-a-key')
+            provider=MetaProvider(api_key='test-placeholder-not-a-key',structured_transport='schema')
             org=DepartmentOrganization(Path(temporary)/'state.db',provider)
             mission={'objective':'Find public cafes and cite sources.', 'inputs':{},'constraints':[],
                 'acceptance_criteria':['Provide cited findings'],'allowed_capabilities':['draft_artifact'],'artifact_checks':[]}
@@ -95,7 +95,7 @@ class SearchResponseRegressions(unittest.TestCase):
     def test_empty_completion_then_search_and_result_keep_separate_failure_budget_and_evidence(self):
         parent=ROOT/'work'/'search-response-regressions';parent.mkdir(parents=True,exist_ok=True)
         with tempfile.TemporaryDirectory(dir=parent) as temporary:
-            provider=MetaProvider(api_key='test-placeholder-not-a-key')
+            provider=MetaProvider(api_key='test-placeholder-not-a-key',structured_transport='schema')
             org=DepartmentOrganization(Path(temporary)/'state.db',provider)
             mission={'objective':'Find public cafe information in Bukit Jalil and cite observed search results.',
                 'inputs':{},'constraints':[], 'acceptance_criteria':['Provide evidence-linked findings'],

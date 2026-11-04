@@ -85,3 +85,9 @@ Local embedding candidates are filtered by scope/review status before ranking. T
 SSE partial output is rejected until a valid completion is observed. Actual syntax checks never execute generated Python. Browser execution stays inside fresh restricted static Chrome; absent Docker never triggers a host shell fallback. Source-only backend delivery must disclose unexecuted tests and runtime limitations.
 
 Distributable source archives exclude all databases, credentials, caches, uploads and run state. The live database intentionally stores DPAPI-encrypted connector values. Audit known secret fields without printing or decrypting their values; do not claim this is an exhaustive secret scan. Folder uploads skip private/hidden/cache files, preserve validated relative paths, and do not grant local filesystem access.
+
+## Structured recovery (0.13)
+
+Native result submission never grants external capabilities or lets the model select host paths. Flat file fields map only to trusted assigned output names and still pass normal ownership/content validation. Strict schemas supplement runtime checks. Normalize exactly one JSON-string result envelope; do not invent data or accept prose as a completed artifact. Rejected-result diagnostics expose only bounded known structural metadata, never raw text, unknown key names or credentials.
+
+Explicit protocol recovery preserves failed history, usage, accepted caches and the twelve-request per-step safety bound. It is not a financial ceiling and does not enable endless retries. Head-led cycle correction cannot change tasks, deliverables, ownership or tools. Backend execution remains isolated-only; the user's confirmed ZIP/browser scope does not waive missing backend execution in earlier immutable missions.

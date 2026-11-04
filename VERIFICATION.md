@@ -1,5 +1,21 @@
 # Mission console and JavaScript execution - verification history
 
+## 0.13 release - 5 November 2026 (MYT)
+
+- Full Python: **296 passed in 581.241s**, zero failures/errors/skips (`work/verification/v13-publication-final-python.log`). This includes 36 new protocol/recovery regressions; prior 288/292 gates are earlier snapshots, not additional coverage.
+- Isolated HTTP/jsdom: **18 passed in 41.945s**, zero failures/skips (`v13-ui-final-clean.log`). An earlier run passed all assertions but failed on a late activity-request continuation after document teardown. The fixture now drains requests/continuations before closing, without swallowing rejections. Log-print wrappers later hit a Windows cp1252 glyph error after writing complete passing logs; that was reporting, not test failure.
+- Real Chrome via official Playwright MCP: **12 passed in 158.498s** (`v13-browser-release.log`). Manual Preview refresh waits for the actual iframe revision; preview tabs close in finally. Console production UI was unchanged after this run except no further production edits; the final fixture teardown edit affects jsdom tests only.
+- QuickJS containment: **8 passed in 7.101s** (`v13-sandbox-final.log`). No new dependencies or execution-adapter behavior changes.
+- New fixture coverage: strict phase schemas, supported native automatic result transport and content fallback, legacy explicit tools, single encoded-result handling, flat source publication and trusted path mapping, sanitized bounded shape diagnostics, recoverable latest intake and failed worker checkpoints, immutable cached outputs/usage, bounded head dependency-cycle correction, empty publisher-placeholder correction versus real blockers.
+
+Live model evidence is separate. The reported chat chat_54dc6095e73c now has accepted final run org_13824693b060 and seven source files. Its final run recorded 12 actual isolated Chromium checks: readiness, send/answer/citations, new chat, switch-back restoration and mobile input. An independent execution against the delivered files passed another 12 checks (`v13-live/rag-browser-final.json`); Python AST and JavaScript syntax checks passed without executing generated Python. ZIP integrity is valid; its manifest and seven files match saved artifacts. The ten original corpus chunks remain semantically identical. Original mission/roster and seven initial call rows are hash-verified unchanged (`v13-live/preservation-audit.json`). Authenticated health: 0.13-structured-recovery, zero active chats/evaluations, credential present.
+
+The user explicitly confirmed **ZIP + browser-tested frontend**, with backend unexecuted. This is an offline TF-IDF demo over ten local demo chunks, not a production LLM-backed RAG service. One equivalent readiness-assignment correction was supplied as an attributed source attachment by the coding assistant; repeated live correction was needed. Earlier malformed outputs, cyclic plan and accepted empty-placeholder failure remain in history. This result is human-assisted scoped delivery, not proof of broad autonomous specialist quality. No historical paid evaluation was rerun and no generated Python ran on the host.
+
+Native named/required tool choices failed Meta HTTP400 and remain unsupported. Supported automatic submission plus matching strict-content fallback passed live. Large nested serialized source still failed in v3; flat literal files fixed the observed publication path. Diagnostics do not retain raw rejected output, so the original rejected prose cannot be reconstructed. Legacy SSE and its deadline checks remain separate from current non-streaming phase transport.
+
+Release report: work/verification/v13-release-report.md. User project ZIP: work/verification/v13-live/RAG-chatbot.zip. Clean source-distribution audit: work/verification/v13-source-archive.json. These are local evidence, excluded from source distributions along with all live databases, encrypted secrets and caches.
+
 ## 0.12 release - 4 November 2026 (MYT)
 
 - Full Python gate: **260 passed in 414.732s**, no failures/errors/skips (`work/verification/v12-python-gate.log`). Prior 249/256/258 runs are superseded release snapshots, not additional coverage.

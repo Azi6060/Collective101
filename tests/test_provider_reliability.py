@@ -38,7 +38,7 @@ class ProviderReliabilityTests(unittest.TestCase):
         parent = ROOT / 'work' / 'provider-reliability-tests'
         parent.mkdir(parents=True, exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(dir=parent)
-        self.provider = MetaProvider(api_key=TEST_SECRET)
+        self.provider = MetaProvider(api_key=TEST_SECRET,structured_transport="schema")
         self.org = DepartmentOrganization(Path(self.temp.name) / 'state.db', self.provider)
         self.mission = {'objective': 'Write accessibility requirements for a grocery landing page.',
                         'inputs': {}, 'constraints': [],

@@ -12,6 +12,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from .context_limits import check_input
+from .structured_output import VERSION
 
 
 class ProviderError(RuntimeError):
@@ -26,12 +27,13 @@ class ProviderError(RuntimeError):
 class Completion:
     message: dict
     tokens: int = 0
+    diagnostic: dict | None = None
 
 
 class MetaProvider:
     name = "meta"
 
-    def __init__(self, api_key=None, base_url="https://api.meta.ai/v1", model=None, timeout=None, max_output_tokens=None,temperature=None):
+    def __init__(self, api_key=None, base_url="https://api.meta.ai/v1", model=None, timeout=None, max_output_tokens=None,temperature=None,structured_transport="function"):
         self.key = api_key if api_key is not None else os.environ.get("MODEL_API_KEY", "")
         if not self.key:
             raise ValueError("Live mode requires MODEL_API_KEY in the environment; do not put the key in source files.")
@@ -47,6 +49,8 @@ class MetaProvider:
         simulation_timeout=timeout if self.name=='simulation' and type(timeout) in (int,float) and 0<timeout<10 else None
         self.policy = request_policy(max_output_tokens,None if simulation_timeout is not None else timeout,temperature)
         self.timeout = simulation_timeout if simulation_timeout is not None else self.policy['timeout_seconds']
+        if structured_transport not in {"function","schema"}:raise ValueError("Unsupported structured transport")
+        self.structured_transport=structured_transport
         self._context_counts={};self._context_lock=threading.RLock()
         self.max_output_tokens = self.policy['max_output_tokens']
 
@@ -55,7 +59,12 @@ class MetaProvider:
         base_timeout=self.timeout
         return {'max_tokens':min(self.max_output_tokens,base_tokens*(2**min(output_retries,2))),
                 'timeout':min(900,base_timeout*(1+.5*(min(transport_retries,2)+min(output_retries,1)))),
-                'reasoning_effort':'high','temperature':self.policy['temperature']}
+                'reasoning_effort':'high','temperature':self.policy['temperature'],'phase':phase,'structured_output':VERSION,'structured_transport':self.structured_transport,'file_submission':'flat'}
+
+    def contract_metadata(self,messages,options):
+        from .structured_output import contract
+        definition=contract(messages,options)
+        return {'output_contract':{k:definition[k] for k in ('phase','sha256','version')}} if definition else {}
 
     def complete(self, messages, tools=None) -> Completion:
         return self.complete_with_options(messages,self.request_options(),tools)
@@ -74,15 +83,26 @@ class MetaProvider:
         if check_input(messages)>850000 and self.model.startswith(('muse-spark','muse-wonder')):
             count=self.measure_input(messages)
             if count+limit+8192>1048576:raise ProviderError('Request exceeds the model context window after reserving output and prompt margin; split the task or compact older history',kind='context')
-        payload = {"model": self.model, "messages": messages, "max_completion_tokens":limit,"reasoning_effort":effort,'temperature':temperature}
-        if not tools:payload.update(stream=True,stream_options={'include_usage':True})
-        if tools:
-            payload.update(tools=tools, tool_choice="auto", parallel_tool_calls=False)
-        elif self.model.startswith('muse-spark'):
-            # The phase validators still enforce semantics and permissions. The
-            # endpoint constrains syntax, including the JSON tool_request branch.
-            payload['response_format']={'type':'json_schema','json_schema':{
-                'name':'organization_response','schema':{'type':'object'}}}
+        from .structured_output import contract,INSTRUCTION,unwrap,safe_shape,file_parameters,file_outcome
+        definition=contract(messages,options) if not tools and self.model.startswith(('muse-spark','muse-wonder')) else None
+        function_mode=bool(definition and options.get('structured_transport',self.structured_transport)=='function')
+        flat_files=bool(function_mode and definition['phase']=='work' and options.get('file_submission','flat')=='flat' and file_parameters(definition))
+        wire_messages=messages+([{'role':'system','content':INSTRUCTION+(' For completed assigned files, call submit_completed_work with each file body directly in file_1, file_2 etc.; never encode the entire result/artifacts as another JSON string. Use submit_agent_result only for blocked work, tool requests, head help or human questions.' if flat_files else ' Return this envelope only by calling submit_agent_result.' if function_mode else '')}] if definition else [])
+        check_input(wire_messages)
+        payload={"model":self.model,"messages":wire_messages,"max_completion_tokens":limit,"reasoning_effort":effort,'temperature':temperature}
+        if tools:payload.update(tools=tools,tool_choice="auto",parallel_tool_calls=False)
+        elif function_mode:
+            payload.update(stream=False,tools=[{'type':'function','function':{'name':'submit_agent_result','description':'Submit exactly one validated phase outcome; this reports data and never executes an external action.','strict':True,'parameters':definition['schema']}}],tool_choice='auto',parallel_tool_calls=False,response_format={'type':'json_schema','json_schema':{'name':'organization_'+definition['phase'],'strict':True,'schema':definition['schema']}})
+        else:
+            payload.update(stream=True,stream_options={'include_usage':True})
+            if self.model.startswith(('muse-spark','muse-wonder')):
+                payload['response_format']={'type':'json_schema','json_schema':{'name':'organization_'+definition['phase'] if definition else 'organization_response',**({'strict':True,'schema':definition['schema']} if definition else {'schema':{'type':'object'}})}}
+        if flat_files:
+            generic=json.loads(json.dumps(definition['schema']))
+            choices=generic['properties']['result']['anyOf']
+            choices[0]=choices[0]['anyOf'][1]  # Only blocked work in the generic native branch.
+            payload['tools'][0]['function']['parameters']=generic
+            payload['tools'].insert(0,{'type':'function','function':{'name':'submit_completed_work','description':'Publish all assigned completed files. Supply each literal file body directly in its file_N parameter; no encoded phase JSON, artifact arrays or guessed paths. Select this only when the assignment is complete.','strict':True,'parameters':file_parameters(definition)}})
         request = urllib.request.Request(self.url, data=json.dumps(payload).encode(),
                                          headers={"Authorization": f"Bearer {self.key}", "Content-Type": "application/json"})
         # Do not follow redirects carrying a provider credential to a different host.
@@ -121,9 +141,40 @@ class MetaProvider:
                 raise ValueError()
             if message.get('refusal'):
                 raise ProviderError('The model declined this request; no tool action was taken',False,kind='refusal',tokens=tokens)
-            if not message.get('tool_calls') and (message.get('content') is None or isinstance(message.get('content'),str) and not message['content'].strip()):
+            if not function_mode and not message.get('tool_calls') and (message.get('content') is None or isinstance(message.get('content'),str) and not message['content'].strip()):
                 raise ProviderError('Model returned an empty assistant answer; no JSON output or tool request was received',True,kind='empty_output',tokens=tokens)
-            return Completion(message, tokens)
+            finish=choice.get('finish_reason');diagnostic={'transport':'function' if function_mode else 'sse' if payload.get('stream') else 'json','finish_reason':finish if finish in {'stop','length','tool_calls','content_filter'} else 'unknown','reported_tokens':tokens}
+            if definition:
+                diagnostic.update(output_contract={k:definition[k] for k in ('phase','sha256','version')})
+                value=None;validation_reason='callback' if function_mode else 'envelope'
+                try:
+                    if function_mode:
+                        calls=message.get('tool_calls',[])
+                        if calls:
+                            if not isinstance(calls,list) or len(calls)!=1:raise ValueError('Expected exactly one result submission')
+                            function=calls[0].get('function',{})
+                            value=parse_object(function.get('arguments'))
+                            if flat_files and function.get('name')=='submit_completed_work':
+                                validation_reason='phase_schema';value={'result':file_outcome(value,definition)};diagnostic['submission_kind']='flat_files'
+                            elif function.get('name')=='submit_agent_result':diagnostic['submission_kind']='function'
+                            else:raise ValueError('Unexpected result submission function')
+                        else:
+                            value=parse_object(message.get('content'));diagnostic['submission_kind']='structured_content'
+                        validation_reason='envelope'
+                        if set(value)!={'result'}:raise ValueError('Result submission requires the phase envelope')
+                    else:value=parse_object(message.get('content'))
+                    diagnostic['envelope_received']=set(value)=={'result'}
+                    diagnostic['result_encoding']='json_string' if isinstance(value.get('result'),str) else 'object'
+                    validation_reason='phase_schema'
+                    value=unwrap(value,definition)
+                    message={'role':'assistant','content':json.dumps(value,ensure_ascii=False,allow_nan=False)}
+                except (ValueError,TypeError,KeyError,AttributeError) as invalid:
+                    error=ProviderError(str(invalid) if isinstance(invalid,StructuredOutputError) else 'Provider result failed the required phase submission contract',True,kind='validation',tokens=tokens)
+                    if isinstance(invalid,json.JSONDecodeError):validation_reason='nested_json'
+                    diagnostic['validation_reason']=validation_reason
+                    shape={**getattr(invalid,'diagnostic',{}).get('response_shape',{}),'structure':safe_shape(value)}
+                    error.diagnostic={'response_shape':shape,'provider_output':diagnostic};raise error from None
+            return Completion(message,tokens,diagnostic)
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             raise ProviderError("Model endpoint response does not match the chat-completions contract",kind='invalid_response',tokens=tokens) from None
 
@@ -237,9 +288,13 @@ class StructuredOutputError(ValueError):
         shape={'category':category,'characters':len(value) if isinstance(value,str) else 0}
         if isinstance(value,str):shape['sha256']=hashlib.sha256(value.encode()).hexdigest()
         if line is not None:shape.update(line=line,column=column)
-        self.diagnostic={'response_shape':shape}
+        stripped=value.lstrip() if isinstance(value,str) else ''
+        if stripped.startswith('```'):
+            language=stripped[3:].split('\n',1)[0].strip().lower();hint='code_fence:'+(language if language in {'python','json','javascript','js','html','css','markdown','text','sql'} else 'unknown')
+        else:hint='json_syntax' if stripped.startswith(('{','[')) else 'prose' if stripped else 'empty'
+        shape['format_hint']=hint;self.diagnostic={'response_shape':shape}
         super().__init__('Model answer must be one valid JSON object; received '+category.replace('_',' ')+
-            '. For an available tool return {"tool_request":{"name":"tool name","arguments":{...}}}; otherwise return the phase output contract. Do not include prose before or after JSON.')
+            ' (format: '+hint+'). For an available tool return {"tool_request":{"name":"tool name","arguments":{...}}}; otherwise return the phase output contract. Do not include prose before or after JSON.')
 
 
 def parse_object(text):

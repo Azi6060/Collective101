@@ -101,7 +101,9 @@ class AgentHarness:
             for item in pending:
                 original_call=next(c for c in previous if c['status']=='help_requested' and json.loads(c['output']).get('help_request')==json.loads(item['request']))
                 self.help_handler(run_id,key,agent_id,original_call['attempt'],json.loads(item['request']))
-        retries=RetryState(previous)
+        boundary=self.store.query('SELECT MAX(after_attempt) AS attempt FROM org_step_recoveries WHERE run_id=? AND step_key=?',(run_id,key))
+        after=boundary[0]['attempt'] or 0
+        retries=RetryState([c for c in previous if c['attempt']>after])
         tool_turns = sum(c['status']=='tool_result' for c in previous)
         if retries.exhausted:
             raise retries.failure(f'Step {key}',previous[-1]['error'] if previous else None)
@@ -119,12 +121,13 @@ class AgentHarness:
                 snapshot=json.loads(previous[0]['input'])
                 memories=json.loads(snapshot[1]['content']).get('prior_experience',memories)
                 memory_cards=json.loads(snapshot[1]['content']).get('consolidated_memory',memory_cards)
+            native_publication=phase=='work' and getattr(self.provider,'structured_transport',None)=='function' and 'draft_artifact' in mission.get('allowed_capabilities',[])
             context_payload = {'phase':phase, 'agent_id':agent_id, **context,
                 'head_help':[json.loads(r['response']) for r in self.store.query("SELECT response FROM org_assistance WHERE run_id=? AND step_key=? AND response IS NOT NULL AND status IN ('answered','declined') ORDER BY rowid",(run_id,key))] if self.help_handler else [],
                 'prior_experience':memories, 'consolidated_memory':memory_cards, 'previous_error':error_note,
                 'available_tools':[item for item in self.tools.catalog(agent_id) if item['name'] in grants],
                 'artifact_delivery':{'available':'draft_artifact' in mission.get('allowed_capabilities',[]),
-                    'method':'Return complete source/text in work.artifacts; runtime saves files and hashes. No tool_request is needed.','assigned_outputs':task.get('outputs',[])},
+                    'method':('Call submit_completed_work with literal file bodies in file_1, file_2 etc. This is an available INTERNAL output transport in the provider tools, not an external capability or tool_request and it needs no extra grant. Never report it missing or emit a placeholder blocked result to switch transports. Generic submit_agent_result is for a genuine blocker, tool request, head help or human question.' if native_publication else 'Return complete source/text in work.artifacts; runtime saves files and hashes. No tool_request is needed.'),'submission_function':'submit_completed_work' if native_publication else None,'native_file_fields':{'file_'+str(i):path for i,path in enumerate(task.get('outputs',[]),1)} if native_publication else {},'assigned_outputs':task.get('outputs',[])},
                 'tool_results':tool_results,
                 'output_contract':FORMATS[phase],
                 **({'work_outcomes':{
@@ -142,6 +145,7 @@ class AgentHarness:
                     (run['calls'],run['tokens'],run['tokens'],budget_id))
                 self.store.execute('INSERT INTO org_run_budgets VALUES(?,?)',(run_id,budget_id))
             options=retries.options(self.provider,phase)
+            if hasattr(self.provider,'contract_metadata'):options.update(self.provider.contract_metadata(messages,options))
             budgets.reserve(self.store,budget_id,messages,output_tokens=options['max_tokens'])
             with self.store.transaction() as db:
                 updated = db.execute('UPDATE org_runs SET calls=calls+1 WHERE id=? AND (max_calls=0 OR calls<max_calls)', (run_id,)).rowcount
@@ -200,6 +204,8 @@ class AgentHarness:
                             ('question_'+uuid.uuid4().hex[:12],run_id,key,agent_id,question,reason,encode(options),'pending',None,now()))
                         db.execute("UPDATE org_calls SET status='waiting',output=? WHERE run_id=? AND step_key=? AND attempt=?",(encode(value),run_id,key,attempt))
                     raise HumanInputRequired()
+                if phase=='work' and value.get('status')=='blocked' and value.get('limitations')==[] and value.get('capability_requests')==[]:
+                    raise ValueError('Blocked work must identify at least one concrete limitation or required capability. Internal file publication is available through submit_completed_work; a transport-switch placeholder is not a completed phase. Publish assigned files when possible, or report a genuine structured blocker/help/question.')
                 value = validator(value)
                 self.store.execute("UPDATE org_calls SET status='accepted',output=? WHERE run_id=? AND step_key=? AND attempt=?",
                     (encode(value),run_id,key,attempt))

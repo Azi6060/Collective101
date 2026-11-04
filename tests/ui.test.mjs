@@ -11,13 +11,22 @@ async function waitFor(predicate,timeout=25000){const end=Date.now()+timeout;whi
 async function setup(healthOverride=null){
   const errors=[];const virtualConsole=new VirtualConsole();virtualConsole.on('jsdomError',error=>errors.push(error.message));
   const dom=new JSDOM(html,{url:base,runScripts:'outside-only',virtualConsole});
-  const win=dom.window;let poll=()=>{};
-  win.fetch=async(url,options={})=>{const target=new URL(url,base);assert.equal(target.origin,base);const response=await fetch(target,{...options,headers:{...options.headers,...(options.method==='POST'?{Origin:base}:{})}});if(target.pathname==='/api/health'&&healthOverride){const data=await response.json();return {ok:response.ok,json:async()=>({...data,...healthOverride})};}return response;};
+  const win=dom.window;let poll=()=>{};const pending=new Set();
+  win.fetch=(url,options={})=>{const request=(async()=>{const target=new URL(url,base);assert.equal(target.origin,base);const response=await fetch(target,{...options,headers:{...options.headers,...(options.method==='POST'?{Origin:base}:{})}});if(target.pathname==='/api/health'&&healthOverride){const data=await response.json();return {ok:response.ok,json:async()=>({...data,...healthOverride})};}await response.clone().arrayBuffer();return response;})();pending.add(request);request.then(()=>pending.delete(request),()=>pending.delete(request));return request;};
   win.setInterval=fn=>{poll=fn;return 1;};win.HTMLElement.prototype.scrollIntoView=function(){};
   for(const code of markdownScripts.slice(0,2))win.eval(code);
   win.eval(markdownScripts[2]+'\n'+script+'\nglobalThis.__testShowSource=showSource;');
   await waitFor(()=>win.document.documentElement.dataset.ready==='true');
-  return {dom,win,doc:win.document,poll:()=>poll(),errors};
+  async function close(){
+    // Drain event-handler fetch continuations before destroying jsdom's document.
+    // Keep rejections observable: no errors are caught or discarded here.
+    for(let turn=0;turn<20;turn++){
+      await Promise.all([...pending]);await new Promise(resolve=>setTimeout(resolve,0));
+      if(!pending.size){await new Promise(resolve=>setTimeout(resolve,0));if(!pending.size)break;}
+    }
+    assert.equal(pending.size,0,'UI requests must settle before teardown');win.close();
+  }
+  return {dom,win,doc:win.document,poll:()=>poll(),errors,close};
 }
 function submit(win,form){form.dispatchEvent(new win.Event('submit',{bubbles:true,cancelable:true}));}
 
@@ -35,7 +44,7 @@ test('assistant Markdown has paragraphs, lists, safe links and inert code',async
     assert.equal(body.querySelector('a[href^="javascript:"]'),null);
     assert.equal(body.querySelector('a').target,'_blank');assert.match(body.querySelector('a').rel,/noopener/);
     assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 test('Markdown file opens in Preview with an exact Source tab and no fingerprint details',async()=>{
@@ -56,7 +65,7 @@ test('Markdown file opens in Preview with an exact Source tab and no fingerprint
     assert.equal(app.doc.getElementById('file-tabs').hidden,true);
     assert.equal(app.doc.getElementById('file-source').hidden,false);
     assert.equal(app.doc.querySelector('#file-source script'),null);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 test('spending controls are removed from chat and benchmarks',async()=>{
@@ -64,7 +73,7 @@ test('spending controls are removed from chat and benchmarks',async()=>{
     for(const id of ['budget-calls','budget-tokens','evaluation-calls'])assert.equal(app.doc.getElementById(id),null);
     assert.equal(app.doc.getElementById('evaluation-trials'),null);
     assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 test('old server requires restart and cannot receive new chat requests through the updated UI',async()=>{
@@ -76,7 +85,7 @@ test('old server requires restart and cannot receive new chat requests through t
     app.doc.getElementById('mission-input').value='Build a grocery landing page';submit(app.win,app.doc.getElementById('mission-form'));
     await waitFor(()=>app.doc.getElementById('notice').textContent.includes('before sending'));
     assert.equal(sent,false);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 test('model source is visible in chat and connectors when only environment config exists',async()=>{
@@ -89,7 +98,7 @@ test('model source is visible in chat and connectors when only environment confi
     assert.match(app.doc.getElementById('model-configuration').textContent,/api.meta.ai/);
     assert.match(app.doc.getElementById('model-configuration').textContent,/32,768|32768/);
     assert.match(app.doc.getElementById('model-configuration').textContent,/not.*verif|not.*test/i);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 test('model request settings save without storing an environment credential',async()=>{
@@ -109,7 +118,7 @@ test('model request settings save without storing an environment credential',asy
     assert.equal(app.doc.getElementById('connector-max-output').value,'20000');
     assert.equal(app.doc.getElementById('connector-timeout').value,'150');
     assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 test('directory exposes departments, roles, reporting lines and per-agent activity',async()=>{
@@ -122,7 +131,7 @@ test('directory exposes departments, roles, reporting lines and per-agent activi
     assert.match(app.doc.getElementById('agent-inspector').textContent,/Works with Mission Director/);
     assert.equal(app.doc.querySelectorAll('#activity-agent option').length,102);
     assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 test('Effectiveness is removed from navigation and page while developer evidence remains available',async()=>{
@@ -132,7 +141,7 @@ test('Effectiveness is removed from navigation and page while developer evidence
     const session=await (await fetch(base+'/api/session')).json();
     const evidence=await fetch(base+'/api/evaluations',{headers:{'X-Console-Token':session.token}});
     assert.equal(evidence.status,200);assert.equal((await evidence.json()).agents.length,101);
-  }finally{app.win.close();}
+  }finally{await app.close();}
 });
 
 test('short mission asks questions and answers continue to a recorded result',async()=>{
@@ -160,7 +169,7 @@ test('short mission asks questions and answers continue to a recorded result',as
     await waitFor(()=>app.doc.querySelectorAll('#activity-content details').length>0);
     assert.match(app.doc.getElementById('activity-mode').textContent,/Live Meta/);
     assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 test('missing HTML keeps Preview disabled with actionable explanation',async()=>{
@@ -170,7 +179,7 @@ test('missing HTML keeps Preview disabled with actionable explanation',async()=>
     assert.match(app.doc.getElementById('preview-status').textContent,/No HTML/);
     assert.ok(app.doc.getElementById('preview-link').classList.contains('d-none'));
     assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 test('preview auto-refresh follows saved revisions, manual mode preserves view and missing page is explained',async()=>{
@@ -211,7 +220,7 @@ test('JavaScript mission displays real sandbox evidence and escapes user markup'
     await waitFor(()=>app.doc.getElementById('activity-content').textContent.includes('QuickJS/WebAssembly'));
     assert.match(app.doc.getElementById('activity-content').textContent,/passed/);
     assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 
@@ -228,7 +237,7 @@ test('greeting uses injected live-provider response and agent inspector shows sc
     assert.match(app.doc.getElementById('agent-inspector').textContent,/Chat with Source Analyst/);
     assert.equal(app.doc.getElementById('agent-inspector').querySelector('pre'),null);
     assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 
@@ -253,7 +262,7 @@ test('connector catalog previews services, filters, and opens accessible setup w
     app.doc.getElementById('connector-setup').dispatchEvent(new app.win.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
     assert.equal(app.doc.getElementById('connector-setup').classList.contains('d-none'),true);
     assert.equal(app.doc.activeElement.getAttribute('aria-label'),'Set up Custom MCP');assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 test('card setup saves encrypted search credentials and enables all 101 agents without selection',async()=>{
@@ -278,7 +287,7 @@ test('card setup saves encrypted search credentials and enables all 101 agents w
     [...app.doc.querySelectorAll('#connector-list button')].find(b=>b.textContent==='Disconnect').click();
     await waitFor(()=>app.doc.querySelector('#connector-list .state-pill')?.textContent==='disabled');
     assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 
@@ -306,7 +315,7 @@ test('chat composer grows without manual resizing and runtime status stays outsi
     await waitFor(async()=>{await app.poll();return app.doc.getElementById('chat-status').textContent==='answered';});
     assert.equal(app.doc.getElementById('chat-progress').classList.contains('d-none'),true);
     assert.equal(app.doc.getElementById('send-mission').disabled,false);assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
+  }finally{await app.close();}
 });
 
 
@@ -325,7 +334,7 @@ test('direct agent chat preserves identity, role boundary and can hand off to or
     assert.match(app.doc.querySelector('.message.assistant .markdown-body').textContent,/Engineering/);
     app.doc.getElementById('organization-chat').click();assert.equal(app.doc.getElementById('agent-chat-context').hidden,true);
     assert.equal(app.doc.getElementById('mission-input').value,'Build me a website');assert.deepEqual(app.errors,[]);
-  }finally{app.win.close();}
+  }finally{await app.close();}
 });
 
 test('file upload attaches a document to the actual sent message without injecting source HTML',async()=>{
@@ -340,5 +349,5 @@ test('file upload attaches a document to the actual sent message without injecti
     assert.match(app.doc.querySelector('.message.user .sent-attachments').textContent,/brief.md/);
     assert.equal(app.doc.querySelectorAll('#pending-attachments .attachment-chip').length,0);
     assert.equal(app.doc.querySelector('#chat-messages script'),null);assert.deepEqual(app.errors,[]);
-  }finally{app.win.close();}
+  }finally{await app.close();}
 });

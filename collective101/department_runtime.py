@@ -11,7 +11,7 @@ from . import budgets
 from . import progress
 from . import repairs
 from . import learning
-from . import assistance,replanning
+from . import assistance,replanning,recovery
 from .agent_tools import SCHEMA as TOOL_SCHEMA, ToolBroker, eligible_tools
 from .connectors import ConnectorManager
 from .runtime_core import POLICY_SCHEMA,policy,run_dag,validate_concurrency
@@ -58,7 +58,7 @@ class DepartmentOrganization:
         self.db_path=Path(db_path)
         self.store = Store(Path(db_path))
         with self.store.transaction() as db:
-            db.executescript(SCHEMA + budgets.SCHEMA + TOOL_SCHEMA + progress.SCHEMA + repairs.SCHEMA + learning.SCHEMA+POLICY_SCHEMA+assistance.SCHEMA)
+            db.executescript(SCHEMA + budgets.SCHEMA + TOOL_SCHEMA + progress.SCHEMA + repairs.SCHEMA + learning.SCHEMA+POLICY_SCHEMA+assistance.SCHEMA+recovery.SCHEMA)
             from .model_requests import ensure_columns
             ensure_columns(db,'org_calls')
         self.provider = provider
@@ -175,7 +175,10 @@ class DepartmentOrganization:
             if set(proposals[department]['depends_on']) - set(initial):
                 raise ValueError('Council requested an unconsulted department; revise the mission shortlist')
             send('coordinated:'+department,head,'director-001','department.coordinated',proposals[department])
-        chosen = call('select','director-001','select',{'proposals':proposals,
+        from .dependency_cycles import reconcile
+        proposals,resolved_cycle=reconcile(proposals,call,send,self._employees,validate_proposal,mission)
+        selection_key='select:dependencies-v1' if resolved_cycle else 'select'
+        chosen = call(selection_key,'director-001','select',{'proposals':proposals,
             'instruction':'Select a coherent useful subset. Include every transitive department dependency; do not select a declined department. Verification will happen independently even if assurance does not propose deliverables.'},
             lambda v: validate_selection(v,proposals))
         order = contracts.topological({d:proposals[d]['depends_on'] for d in chosen['departments']})

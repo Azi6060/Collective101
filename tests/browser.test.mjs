@@ -96,6 +96,7 @@ test('provider clarification can be answered and leads to reviewed mission evide
   const previewURL=await inspect(browser,()=>document.querySelector('#preview-link').href);
   assert.notEqual(new URL(previewURL).port,new URL(base).port);
   await browser.call('browser_tabs',{action:'select',index:1});
+  try {
   await waitUntil(browser,()=>!!document.querySelector('#site')&&!document.querySelector('#site').hidden,'preview frame');
   assert.equal(await inspect(browser,()=>window.opener===null),true);
   assert.equal(await inspect(browser,()=>document.querySelector('#site').getAttribute('sandbox')),'allow-scripts');
@@ -105,8 +106,10 @@ test('provider clarification can be answered and leads to reviewed mission evide
   assert.ok(reference,'Interactive generated button is accessible');await click(reference);
   assert.match(resultText(await browser.call('browser_snapshot')),/Interaction works/);
   const previous=await inspect(browser,()=>document.querySelector('#site').src);
-  await click('#refresh');await waitUntil(browser,()=>!document.querySelector('#refresh').disabled,'manual refresh');
-  assert.notEqual(await inspect(browser,()=>document.querySelector('#site').src),previous);
+  await click('#refresh');
+  let refreshed=previous;const refreshDeadline=Date.now()+30000;
+  while(refreshed===previous&&Date.now()<refreshDeadline){await new Promise(resolve=>setTimeout(resolve,150));refreshed=await inspect(browser,()=>document.querySelector('#site').src);}
+  assert.notEqual(refreshed,previous);
   await shot('website-preview');
   await browser.call('browser_resize',{width:390,height:844});
   const layout=await inspect(browser,()=>({width:document.documentElement.scrollWidth,viewport:innerWidth,bottom:document.querySelector('iframe').getBoundingClientRect().bottom,height:innerHeight}));
@@ -115,7 +118,7 @@ test('provider clarification can be answered and leads to reviewed mission evide
   assert.equal(await inspect(browser,()=>document.documentElement.scrollWidth<=innerWidth),true);
   await browser.call('browser_resize',{width:1440,height:1000});
   const previewErrors=resultText(await browser.call('browser_console_messages',{level:'warning'}));assert.match(previewErrors,/Errors: 0, Warnings: 0/);
-  await browser.call('browser_tabs',{action:'close',index:1});await browser.call('browser_tabs',{action:'select',index:0});
+  } finally {await browser.call('browser_tabs',{action:'close',index:1});await browser.call('browser_tabs',{action:'select',index:0});}
   await click('#view-evidence');
   await waitUntil(browser,()=>document.querySelectorAll('#activity-content details').length>0,'recorded evidence');
 });

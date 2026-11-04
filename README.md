@@ -6,7 +6,13 @@ An AI organization with **101 individually configured agents: one Mission Direct
 
 Read [PROJECT_STATUS.md](PROJECT_STATUS.md) for the living aim, verified status, limitations and next work. [AGENTS.md](AGENTS.md) governs project maintenance. Browse [all departments and agent files](collective101/departments/README.md).
 
-The organization produces and reviews code/text artifacts and can now execute **pure JavaScript acceptance checks in a QuickJS/WebAssembly sandbox**. Eligible agents can also read/search approved knowledge, recall reviewed episodes, and request configured public web search. It can connect compatible remote MCP tools through the Connectors tab. It does not deploy websites or provide a full browser/DOM. The included fixture demonstrations exercise the real organization control flow with scripted model responses; they do not perform AI inference.
+The organization produces and reviews code/text artifacts and can now execute **pure JavaScript acceptance checks in a QuickJS/WebAssembly sandbox**. Eligible agents can also read/search approved knowledge, recall reviewed episodes, and request configured public web search. It can connect compatible remote MCP tools through the Connectors tab. Eligible agents can preview saved static projects in isolated Chromium. Python/Node runtime checks require a configured offline Docker profile; the current machine has no such runner. Deployment remains unavailable. The included fixture demonstrations exercise the real organization control flow with scripted model responses; they do not perform AI inference.
+
+## Structured-output recovery (0.13)
+
+Meta-backed phases use automatic native result submission and a matching strict JSON-content fallback. Assigned files travel as literal file fields; the runtime owns their paths. Internal organization messages remain structured, while users see readable replies. Invalid results stop with sanitized diagnostics; raw rejected output and secrets are not logged. A blocked validation step may receive an explicit **Retry** after a protocol correction, preserving previous calls, usage and completed steps. There is no automatic replay of historical failed chats. Cyclic department prerequisites receive bounded head-led correction before work starts.
+
+The recovered seven-file RAG example in the existing chat is an offline TF-IDF demo with a browser-tested frontend and **unexecuted backend source**. Download its ZIP from the chat and follow engineering/README.md. Open Preview to try the frontend's local fallback. A Preview pass does not prove backend API execution.
 
 ## Open the mission-control UI
 
@@ -31,7 +37,7 @@ Clarification questions come from the agent's JSON response and carry its identi
 
 Pause takes effect before the next agent phase. A running provider call is allowed to finish. Resume is explicit after a server interruption. Repairable quality failures receive bounded head-led correction; unavailable essential capabilities remain blocked. Failed histories are never silently replayed.
 
-This server binds only to `127.0.0.1`. Mutation endpoints require the local session token and same-origin requests. It is a single-user development application, not a public production server. Stop it with Ctrl+C in its terminal. Live keys belong only in the process environment; restart the server after changing configuration.
+This server binds only to `127.0.0.1`. Mutation endpoints require the local session token and same-origin requests. It is a single-user development application, not a public production server. Stop it with Ctrl+C in its terminal. Configure live keys in Connectors (Windows DPAPI-encrypted) or the server process environment; environment changes require a restart.
 
 ### JavaScript execution example
 
