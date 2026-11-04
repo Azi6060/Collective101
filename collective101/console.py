@@ -68,7 +68,7 @@ class MissionConsole:
         import os
         configuration=self.connectors.model_configuration()
         from .execution_adapters import browser_readiness,container_readiness
-        return {'version':'0.9.4-markdown-workspace','features':{'chat_workspace':True,'artifact_archives':True,'site_preview':True,'effectiveness':True},'live_configured':configuration['configured'],'model_configuration':configuration,'limits':public_limits(configuration['model']),'sandbox':readiness(),
+        return {'version':'0.12.0-visual-workspace','features':{'chat_workspace':True,'artifact_archives':True,'site_preview':True,'effectiveness':True,'orbital_workspace':True,'mission_studio':True,'visual_workspace':True,'site_thumbnails':True},'live_configured':configuration['configured'],'model_configuration':configuration,'limits':public_limits(configuration['model']),'sandbox':readiness(),
                 'execution':{'concurrency':self.execution_concurrency,'browser':browser_readiness(),'python':container_readiness('python'),'node_build':container_readiness('node_build')},'active_evaluations':self.evaluations.active_count(),
                 'tools':ToolBroker(self.store,self.organization.roster).catalog(),'mode':'local','agents':101,'departments':10,'active_chats':len(self.active)}
 

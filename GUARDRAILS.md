@@ -1,5 +1,7 @@
 # Guardrails and operational boundaries
 
+UI thumbnail addition (4 November 2026): authenticated same-origin operator capture accepts only a validated saved HTML artifact. It freezes at most 32 files/1 MiB, serves them on a separate opaque capability origin, disables page JavaScript/service workers/downloads, and blocks requests outside the exact frozen artifact prefix. A fixed trusted screenshot runner uses the existing fresh Chromium sandbox and Windows owned-process-tree/filtered-environment bounds (one capture, 22 s, 1 GiB); PNG output is at most 1 MiB with eight revision-specific in-memory cache entries. No arbitrary URL/path/evaluate, personal profile, console credentials, model call or host execution fallback is exposed. Working drafts capture only by explicit user action; automatic thumbnails wait for a stable outcome and visibility. Static pictures are presentation, not acceptance/competence/deployment evidence. Existing agent grants, mission budgets, review prerequisites and interactive Preview isolation are unchanged.
+
 Policy reviewed: 2 November 2026 (Asia/Kuala_Lumpur). This is a policy/risk record; PROJECT_STATUS.md owns the roadmap.
 
 | Risk or edge case | Enforced behavior | Limits |

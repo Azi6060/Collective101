@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from .console import MissionConsole
 from .locking import workspace_lock
 from .preview import PreviewManager
+from .thumbnails import ThumbnailManager
 from . import budgets
 
 WEB = Path(__file__).parent/'web'
@@ -17,6 +18,7 @@ def make_server(state,port=8765,console=None):
     service=console or MissionConsole(state)
     token=secrets.token_urlsafe(32)
     previews=PreviewManager(service)
+    thumbnails=ThumbnailManager(previews)
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args): pass
 
@@ -69,12 +71,20 @@ def make_server(state,port=8765,console=None):
                     else: return self.send(404,{'error':'Not found'})
                     return self.send(200,result)
                 except ValueError as error: return self.send(404,{'error':str(error)})
-            files={'/':'index.html','/chat':'index.html','/organization':'index.html','/activity':'index.html','/connectors':'index.html','/evaluations':'index.html',
+            files={'/':'index.html','/chat':'index.html','/organization':'index.html','/activity':'index.html','/connectors':'index.html','/evaluations':'index.html','/settings':'index.html','/dashboard':'index.html',
                    '/app.css':'app.css','/app.js':'app.js','/markdown.js':'markdown.js','/vendor/marked.umd.js':'vendor/marked.umd.js',
                    '/vendor/purify.min.js':'vendor/purify.min.js','/vendor/bootstrap.min.css':'vendor/bootstrap.min.css'}
             if path not in files: return self.send(404,{'error':'Not found'})
             target=WEB/files[path]
             if not target.is_file(): return self.send(404,{'error':'Asset unavailable'})
+            # Keep established asset URLs so an older running backend can show the
+            # frontend's restart guard. Components stay separately maintainable.
+            if path=='/app.js':
+                parts=[WEB/name for name in ('locales.js','preferences.js','visuals.js','organization-ui.js','thumbnail-ui.js','mission-ui.js','dashboard.js','app.js')]
+                if not all(part.is_file() for part in parts):return self.send(404,{'error':'Asset unavailable'})
+                return self.send(200,b'\n;\n'.join(part.read_bytes() for part in parts),'text/javascript; charset=utf-8')
+            if path=='/app.css':
+                return self.send(200,target.read_bytes()+b'\n'+(WEB/'workspace.css').read_bytes(),'text/css; charset=utf-8')
             return self.send(200,target.read_bytes(),mimetypes.guess_type(target.name)[0] or 'application/octet-stream')
 
         def do_POST(self):
@@ -119,6 +129,7 @@ def make_server(state,port=8765,console=None):
                     elif action=='messages': result=service.message(cid,payload.get('message'))
                     elif action=='control': result=service.control(cid,payload.get('action'))
                     elif action=='preview': result=previews.open(cid,payload.get('entry'))
+                    elif action=='thumbnail': result=thumbnails.capture(cid,payload.get('entry'))
                     else: return self.send(404,{'error':'Not found'})
                 return self.send(200,result)
             except (ValueError,KeyError,TypeError) as error:

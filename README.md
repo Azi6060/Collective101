@@ -1,6 +1,6 @@
 # Collective 101
 
-Main project: `C:\New folder\Desktop\collective101`.
+Active project for this checkout: `C:\Users\justs\OneDrive\Documents\Desktop\collective101`.
 
 An AI organization with **101 individually configured agents: one Mission Director, ten department heads and ninety employees**. Heads decide whether they can contribute, coordinate with other heads, assign their own employees, collect results and report to the director. The runtime enforces the reporting hierarchy.
 
@@ -19,11 +19,27 @@ python -m collective101 --state .collective101/console.db serve --port 8765
 
 Open **http://127.0.0.1:8765**. `Start Collective101.cmd` is a double-click launcher for the server. Bootstrap CSS is bundled locally; the UI does not require a CDN.
 
-- **Overview:** organization counts, provider/sandbox readiness and mission history.
+- **Dashboard:** start a mission draft, resume recent work, see conversations needing your guidance, and check model/sandbox readiness. Counts describe the recent history returned by the server, rather than lifetime totals. The constellation represents the registered organization, not live agent activity. **Open in Chat** prepares an editable draft; it does not send it to a model.
 - **Organization:** ten departments, all 101 agents, individual responsibilities, reporting lines and role instructions.
 - **Mission chat:** describe the outcome, answer clarification questions, inspect the brief, and start the organization. Live chat requires a configured model; credentials can be saved in Connectors.
 - **Connectors:** browse a searchable card catalog. Gmail, Slack, Canva, GitHub, Google Drive and Google Calendar are clearly marked Coming soon. Set up the live model, Web search or Custom MCP from their cards; enabled tools are shared with all 101 agents.
 - **Activity & evidence:** agent actions and status, leadership messages, artifact contents/downloads, and actual sandbox results. Filter by agent and mission. The page polls persisted state every 1.5 seconds; it does not display hidden model reasoning.
+- **Effectiveness:** inspect evaluation evidence and explicitly run bounded evaluations. Fixture results remain distinct from live evidence.
+- **Settings:** choose Light, Dark or System appearance, interface language, larger text and reduced motion. New/reset preferences default to **English and Dark**. Fourteen language choices cover English, Chinese, Spanish, Hindi, Arabic, French, Portuguese, Russian, Bengali, German, Japanese, Korean, Indonesian and Malay. Navigation and settings are localized; detailed labels without a translation fall back to English. Agent replies and saved artifacts retain their original language. Arabic mirrors the workspace navigation. Preferences are saved in this browser; model credentials remain in Connectors. Open `/settings` directly, or use the sidebar/top-right settings control.
+
+The visual workspace uses bundled styles and scripts without a CDN or new dependencies. `/` and `/dashboard` open the Dashboard; existing chat, organization, connector, activity and evaluation routes remain available. After updating an older running server, restart it to load the complete workspace; the UI shows a restart notice when backend features are missing.
+
+The workspace includes continuous decorative light orbits, floating dots, drifting particles, a breathing halo and shifting glow. The map stays at native scale without hover tilt, zoom or an SVG blur/shadow filter; department labels remain stationary. Navigation, cards and previews retain their short interaction effects. The map does not represent agent activity. The separate Pause/Resume animation buttons were removed at the user's request; historical pause choices are ignored. **Settings → Accessibility → Reduce motion**, or your device's reduced-motion preference, removes decorative movement. Hidden tabs and offscreen scenes suspend their effects. Motion never submits a mission or delays the underlying controls.
+
+Recent-work cards show saved titles, dates, statuses and a relevant next action. Inside a mission chat, open its title strip to inspect **Plan → Create → Review → Outcome** and the recorded departments. Milestones describe available evidence; missing review records or earlier-revision records do not imply a successful current review. Selected departments are distinguished from departments merely observed in recorded activity.
+
+When a conversation has files, **Your saved deliverables** shows up to four file cards and an **All saved files** list. Read Markdown, inspect inert source, download a file, or open a saved HTML page through the existing isolated website Preview. Cards show genuine source excerpts or the static page captures described below; neither is proof of deployment. Files may include earlier work in the conversation; the current mission's review label does not certify each historical file. All original files/activity/ZIP controls remain available in the inspector. New chats stay empty until real user work creates files; no sample mission is inserted into normal history.
+
+Organization now opens an interactive reporting map. Select a department to see its actual head and employees; use **Department directory** or search to browse the original directory. Role details open in a side drawer: Escape/Close returns focus to the opener, and technical instructions/tools/memory are expandable. The map presents registered reporting relationships, not evidence that all agents are working or independently effective.
+
+Saved HTML cards can show a **Static page preview** captured from the actual saved HTML/CSS. The first visible website card captures automatically after a stable outcome; during work, **Show page thumbnail** explicitly captures the current saved page. Captures use fresh sandboxed Chrome with scripts disabled and external requests blocked. They require the existing Windows/Chrome/Node/Playwright setup, support at most 32 files/1 MiB of source, use a fixed 960×600 viewport and one bounded capture at a time, and cache eight revision-specific images in memory. No model call, upload or deployment is involved. JavaScript-dependent content and external assets may be absent; use **Open website** for the existing interactive preview. If capture is unavailable, source excerpts remain available with a disclosed fallback.
+
+Activity presents recorded actions with readable phase labels and local timestamps; expand an event for the retained raw evidence. Filters and downloads remain available. Clearing the selected mission returns the empty-state guidance. Connector cards use bundled SVG marks, while Coming soon services remain previews. Light mode uses warm neutral surfaces; Dark mode, English-default language choices, continuous decorative motion and reduced-motion settings remain.
 
 Every chat message, including "Hi", goes to **Head of Distribution (`distribution-001`)** through the configured live model. The agent chooses a direct reply, a contextual clarification, or a mission with relevant departments. There are no canned greetings, keyword/length question rules or demo run option in chat. Missing configuration or provider failure produces an error, never a scripted fallback. Historical demo chats remain on disk but are hidden from normal chat history.
 

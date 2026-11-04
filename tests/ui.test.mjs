@@ -6,20 +6,127 @@ const base=process.env.COLLECTIVE101_TEST_URL;
 if(!base)throw new Error('Run npm.cmd run test:ui to use the isolated test service.');
 const html=await readFile(new URL('../collective101/web/index.html',import.meta.url),'utf8');
 const script=await readFile(new URL('../collective101/web/app.js',import.meta.url),'utf8');
+const presentationScripts=await Promise.all(['locales.js','preferences.js','visuals.js','organization-ui.js','thumbnail-ui.js','mission-ui.js','dashboard.js'].map(file=>readFile(new URL('../collective101/web/'+file,import.meta.url),'utf8')));
 const markdownScripts=await Promise.all(['vendor/marked.umd.js','vendor/purify.min.js','markdown.js'].map(file=>readFile(new URL('../collective101/web/'+file,import.meta.url),'utf8')));
 async function waitFor(predicate,timeout=25000){const end=Date.now()+timeout;while(Date.now()<end){if(await predicate())return;await new Promise(resolve=>setTimeout(resolve,70));}throw new Error('Timed out waiting for UI state');}
-async function setup(healthOverride=null){
+async function setup(healthOverride=null,options={}){
   const errors=[];const virtualConsole=new VirtualConsole();virtualConsole.on('jsdomError',error=>errors.push(error.message));
-  const dom=new JSDOM(html,{url:base,runScripts:'outside-only',virtualConsole});
+  const dom=new JSDOM(html,{url:base,runScripts:'outside-only',virtualConsole,pretendToBeVisual:true});
   const win=dom.window;let poll=()=>{};
-  win.fetch=async(url,options={})=>{const target=new URL(url,base);assert.equal(target.origin,base);const response=await fetch(target,{...options,headers:{...options.headers,...(options.method==='POST'?{Origin:base}:{})}});if(target.pathname==='/api/health'&&healthOverride){const data=await response.json();return {ok:response.ok,json:async()=>({...data,...healthOverride})};}return response;};
+  if(options.savedPreferences)win.localStorage.setItem('collective101.preferences.v1',JSON.stringify(options.savedPreferences));
+  if(options.ambientPaused)win.localStorage.setItem('collective101.ambient-paused.v1','true');
+  if(options.storageBlocked)Object.defineProperty(win,'localStorage',{get(){throw new Error('Storage blocked');}});
+  win.matchMedia=query=>({matches:query.includes('reduced-motion')?options.systemReducedMotion===true:query.includes('pointer')?true:options.systemDark===true,addEventListener(){}});
+  win.fetch=async(url,requestOptions={})=>{const target=new URL(url,base);assert.equal(target.origin,base);const response=await fetch(target,{...requestOptions,headers:{...requestOptions.headers,...(requestOptions.method==='POST'?{Origin:base}:{})}});if(target.pathname==='/api/health'&&healthOverride){const data=await response.json();return {ok:response.ok,json:async()=>({...data,...healthOverride})};}if(target.pathname==='/api/chats'&&options.chatRows&&requestOptions.method!=='POST')return {ok:true,json:async()=>options.chatRows};return response;};
   win.setInterval=fn=>{poll=fn;return 1;};win.HTMLElement.prototype.scrollIntoView=function(){};
   for(const code of markdownScripts.slice(0,2))win.eval(code);
+  for(const code of presentationScripts)win.eval(code);
   win.eval(markdownScripts[2]+'\n'+script+'\nglobalThis.__testShowSource=showSource;');
   await waitFor(()=>win.document.documentElement.dataset.ready==='true');
   return {dom,win,doc:win.document,poll:()=>poll(),errors};
 }
 function submit(win,form){form.dispatchEvent(new win.Event('submit',{bubbles:true,cancelable:true}));}
+
+test('dashboard shows saved mission state and opens a draft without spending model credits',async()=>{
+  const rows=[{id:'test_running',title:'A real active mission',status:'running',created_at:'2026-11-04T01:00:00Z'},
+    {id:'test_waiting',title:'A decision for you',status:'needs_input',created_at:'2026-11-04T01:00:00Z'},
+    {id:'test_reviewed',title:'A reviewed result',status:'reviewed',created_at:'2026-11-04T01:00:00Z'},
+    {id:'test_answered',title:'<img src=x onerror=alert(1)>',status:'answered',created_at:'2026-11-04T01:00:00Z'}];
+  const app=await setup(null,{chatRows:rows});try{
+    assert.equal(app.doc.getElementById('metric-active').textContent,'1');
+    assert.equal(app.doc.getElementById('metric-attention').textContent,'1');
+    assert.equal(app.doc.getElementById('metric-reviewed').textContent,'1');
+    assert.equal(app.doc.getElementById('metric-chats').textContent,'4');
+    assert.equal(app.doc.querySelectorAll('#dashboard-attention .attention-item').length,1);
+    assert.equal(app.doc.querySelectorAll('#mission-list img').length,0);
+    assert.match(app.doc.getElementById('mission-list').textContent,/<img/);
+    assert.equal(app.doc.querySelectorAll('.constellation-employee').length,90);
+    assert.equal(app.doc.querySelectorAll('.constellation-head').length,10);
+    assert.equal(app.doc.querySelectorAll('.constellation-cluster').length,10);
+    assert.equal(app.doc.querySelectorAll('.constellation-sweep').length,1);
+    const constellation=app.doc.getElementById('constellation');
+    const firstCluster=constellation.querySelector('.constellation-cluster');
+    await app.poll();assert.equal(constellation.querySelector('.constellation-cluster'),firstCluster,'Polling unchanged state must not rebuild/replay the map');
+    const focusedCard=app.doc.querySelector('.mission-card');focusedCard.focus();rows[0].status='paused';await app.poll();
+    assert.equal(app.doc.activeElement.dataset.chatId,rows[0].id,'Mission updates preserve keyboard focus');
+    let posted=false;const original=app.win.fetch;app.win.fetch=(url,opts)=>{if(opts?.method==='POST')posted=true;return original(url,opts);};
+    const draft='Create a useful research brief for my team.';app.doc.getElementById('dashboard-input').value=draft;
+    submit(app.win,app.doc.getElementById('dashboard-mission'));
+    assert.equal(app.win.location.pathname,'/chat');assert.equal(app.doc.getElementById('mission-input').value,draft);assert.equal(posted,false);
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
+
+test('Settings applies every language and preserves validated preferences with English default and reset',async()=>{
+  const app=await setup();try{
+    assert.equal(app.doc.documentElement.lang,'en');assert.equal(app.doc.documentElement.dataset.theme,'dark');
+    app.doc.querySelector('[data-nav="settings"]').click();
+    const language=app.doc.getElementById('setting-language');assert.equal(language.options.length,14);assert.equal(language.options[0].value,'en');
+    const draft=app.doc.getElementById('mission-input');draft.value='Keep my draft.';
+    for(const option of [...language.options]){language.value=option.value;language.dispatchEvent(new app.win.Event('change'));assert.equal(app.doc.documentElement.lang,option.value);assert.equal(app.doc.documentElement.dir,option.value==='ar'?'rtl':'ltr');assert.equal(app.doc.getElementById('breadcrumb').textContent,app.win.CollectivePreferences.t('Settings'));assert.equal(draft.value,'Keep my draft.');}
+    app.doc.querySelector('[name="theme"][value="light"]').click();
+    app.doc.getElementById('setting-reduce-motion').click();
+    const prefs=app.win.CollectivePreferences.get();const reloaded=await setup(null,{savedPreferences:prefs});try{assert.equal(reloaded.doc.documentElement.dataset.theme,'light');assert.equal(reloaded.doc.documentElement.dataset.reduceMotion,'true');assert.equal(reloaded.doc.documentElement.lang,'ms');}finally{reloaded.dom.window.close();}
+    app.doc.getElementById('reset-preferences').click();assert.equal(app.doc.documentElement.lang,'en');assert.equal(app.doc.documentElement.dir,'ltr');assert.equal(app.doc.documentElement.dataset.theme,'dark');
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
+
+test('mission studio uses recorded evidence, keeps partial files inert and preserves keyboard focus',async()=>{
+  const app=await setup();try{
+    const files=[{path:'engineering/index.html',content:'<title><img src=x onerror=alert(1)></title>\n<script>alert(1)</script>',language:'HTML',lines:2,sha256:'first',agent_id:'engineering-003'},
+      {path:'research/notes.md',content:'# Actual saved notes\n\n<script>alert(1)</script>\n![remote](https://example.com/track)',language:'Markdown',lines:4,sha256:'second',agent_id:'research-002'}];
+    const chat={id:'synthetic',title:'A blocked draft',run_id:'root',effective_run_id:'revision',status:'blocked',brief:{objective:'A useful outcome'},run:{result:{selected_departments:['engineering']}},workspace:{files,preview:{ready:true},events:[{id:'root:review:1',phase:'review',status:'accepted',agent_id:'assurance-001'},{id:'revision:work:1',phase:'work',status:'accepted',agent_id:'engineering-003'}]}};
+    const roster={departments:[{id:'engineering',name:'Engineering'},{id:'assurance',name:'Verification'}]};
+    const calls=[];const handlers={showSource:file=>calls.push(['source',file.path]),openPreview:path=>calls.push(['preview',path]),downloadFile:file=>calls.push(['download',file.path]),viewEvidence:()=>{},previewAvailable:true};
+    app.win.CollectiveMissionUI.render(chat,roster,handlers);
+    const journey=app.doc.getElementById('mission-journey'),results=app.doc.getElementById('mission-results');
+    assert.equal(journey.hidden,false);assert.match(journey.querySelector('.journey-step:last-child').textContent,/Blocked/);
+    assert.match(journey.querySelectorAll('.journey-step')[2].textContent,/Not recorded/,'An earlier revision review cannot mark the active revision reviewed');
+    assert.equal(journey.querySelectorAll('.department-badge').length,1);assert.match(journey.querySelector('.department-badge').textContent,/Engineering/);
+    assert.equal(results.querySelectorAll('.deliverable-card').length,2);assert.equal(results.querySelector('script,iframe,img'),null);
+    assert.match(results.textContent,/<img/);assert.doesNotMatch(results.querySelector('.results-heading').textContent,/Current mission reviewed/);
+    [...results.querySelectorAll('button')].find(button=>button.textContent==='Open website').click();
+    results.querySelector('.deliverable-download').click();assert.deepEqual(calls,[['preview','engineering/index.html'],['download','engineering/index.html']]);
+    const original=results.querySelector('.deliverable-card');app.win.CollectiveMissionUI.render(chat,roster,handlers);assert.equal(results.querySelector('.deliverable-card'),original);
+    const details=results.querySelector('.all-deliverables');details.open=true;const focused=details.querySelector('.file-text-link');focused.focus();
+    chat.status='reviewed';app.win.CollectiveMissionUI.render(chat,roster,handlers);
+    assert.equal(results.querySelector('.all-deliverables').open,true);assert.equal(app.doc.activeElement.dataset.filePath,files[0].path);assert.equal(app.doc.activeElement.dataset.fileAction,'list-source');
+    assert.match(results.querySelector('.results-heading').textContent,/Current mission reviewed/);
+    app.win.CollectiveMissionUI.render(null,roster,handlers);assert.equal(journey.hidden,true);assert.equal(results.hidden,true);
+    app.win.CollectiveMissionUI.render(chat,roster,handlers);assert.ok(journey.querySelector('summary'));
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
+
+test('blocked storage and invalid preferences do not block the workspace',async()=>{
+  for(const opts of [{storageBlocked:true},{savedPreferences:{theme:'bad',language:'invalid',textSize:'gigantic',reduceMotion:'true'}}]){
+    const app=await setup(null,opts);try{
+      assert.equal(app.doc.documentElement.lang,'en');assert.equal(app.doc.documentElement.dataset.theme,'dark');
+      app.doc.querySelector('[name="theme"][value="light"]').click();assert.equal(app.doc.documentElement.dataset.theme,'light');
+      if(opts.storageBlocked)assert.match(app.doc.getElementById('preferences-status').textContent,/this visit only/);
+      assert.deepEqual(app.errors,[]);
+    }finally{app.dom.window.close();}
+  }
+});
+
+test('ambient motion stays continuous without pause controls and respects reduced-motion preferences',async()=>{
+  const app=await setup(null,{ambientPaused:true});try{
+    assert.equal(app.doc.documentElement.dataset.ambientMotion,'running');
+    assert.equal(app.doc.querySelectorAll('.ambient-orbit').length,3);
+    assert.equal(app.doc.querySelector('[data-motion-toggle]'),null);
+    assert.equal(app.doc.querySelector('.cluster-atmosphere text'),null,'Floating decorative dots cannot move department labels');
+    app.doc.getElementById('setting-reduce-motion').click();assert.equal(app.doc.documentElement.dataset.ambientMotion,'reduced');
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+  for(const options of [{systemReducedMotion:true},{storageBlocked:true}]){
+    const instance=await setup(null,options);try{
+      if(options.systemReducedMotion)assert.equal(instance.doc.documentElement.dataset.ambientMotion,'reduced');
+      else assert.equal(instance.doc.documentElement.dataset.ambientMotion,'running');
+      assert.deepEqual(instance.errors,[]);
+    }finally{instance.dom.window.close();}
+  }
+});
 
 test('assistant Markdown has paragraphs, lists, safe links and inert code',async()=>{
   const app=await setup();try{
@@ -130,6 +237,44 @@ test('directory exposes departments, roles, reporting lines and per-agent activi
   }finally{app.dom.window.close();}
 });
 
+test('organization explorer preserves real reporting roles, directory access and drawer keyboard return',async()=>{
+  const app=await setup();try{
+    app.doc.querySelector('[data-nav="organization"]').click();
+    assert.equal(app.doc.querySelectorAll('.organization-node').length,10);
+    app.doc.querySelector('.organization-node[data-department="research"]').click();
+    assert.equal(app.doc.getElementById('organization-details').dataset.department,'research');
+    assert.equal(app.doc.querySelectorAll('.explorer-employee').length,9);
+    const head=app.doc.querySelector('.explorer-head');head.focus();head.click();
+    assert.match(app.doc.getElementById('agent-inspector').textContent,/Reports to: Mission Director/);
+    app.doc.dispatchEvent(new app.win.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+    assert.equal(app.doc.getElementById('agent-inspector').classList.contains('d-none'),true);assert.equal(app.doc.activeElement,head);
+    app.doc.querySelector('[data-organization-mode="directory"]').click();assert.equal(app.doc.getElementById('department-grid').classList.contains('d-none'),false);
+    app.doc.querySelector('.department-card[data-department="operations"]').click();assert.equal(app.doc.getElementById('organization-details').dataset.department,'operations');
+    assert.equal(app.doc.getElementById('organization-explorer').hidden,false);assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
+
+test('saved-page thumbnail UI uses the capture result and discloses failures without replacing source',async()=>{
+  const app=await setup();try{
+    app.doc.querySelector('[data-nav="chat"]').click();
+    const sample=app.doc.createElement('div');sample.className='deliverable-sample';sample.textContent='Actual saved source';
+    const grid=app.doc.createElement('div');grid.className='deliverable-grid';grid.append(sample);app.doc.getElementById('mission-results').append(grid);
+    const calls=[];app.win.CollectiveThumbnails.configure(async(cid,entry)=>{calls.push([cid,entry]);return {image:'data:image/png;base64,iVBORw0KGgo=',width:960,height:600};});
+    const observed=[];app.win.IntersectionObserver=class {observe(node){observed.push(node);}unobserve(){}};
+    const file={path:'engineering/index.html',sha256:'first'},chat={id:'test-capture',status:'running',workspace:{files:[file]}};
+    app.win.CollectiveThumbnails.attach(sample,file,chat);sample.querySelector('button').click();
+    assert.equal(observed.length,0,'Mutable working drafts must not race automatic thumbnail captures');
+    await waitFor(()=>sample.querySelector('img'));assert.deepEqual(calls,[['test-capture','engineering/index.html']]);
+    assert.equal(sample.querySelector('img').alt,'Static preview of engineering/index.html');assert.match(sample.textContent,/Static page preview/);
+    const stable=app.doc.createElement('div');grid.append(stable);chat.status='reviewed';app.win.CollectiveThumbnails.attach(stable,file,chat);assert.equal(observed.length,1,'Stable saved outcomes can load a visible thumbnail');
+    const failure=app.doc.createElement('div');failure.textContent='Original source stays';grid.append(failure);
+    app.win.CollectiveThumbnails.configure(async()=>{throw new Error('unavailable');});
+    app.win.CollectiveThumbnails.attach(failure,{path:'engineering/other.html',sha256:'other'},chat);failure.querySelector('button').click();
+    await waitFor(()=>failure.textContent.includes('Thumbnail unavailable'));assert.match(failure.textContent,/Original source stays/);assert.equal(failure.querySelector('img'),null);
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
+});
+
 test('Effectiveness exposes honest scorecards and versioned role cases without starting paid work',async()=>{
   const app=await setup();try{
     app.doc.querySelector('[data-nav="evaluations"]').click();
@@ -169,6 +314,9 @@ test('short mission asks questions and answers continue to a recorded result',as
     const fields=app.doc.querySelectorAll('.intervention textarea');
     fields[0].value='For a local coffee shop serving residents who need to browse the menu and find the location.';
     fields[1].value='An accessible responsive page with opening hours, clear headings and operations documentation.';
+    app.doc.querySelector('[name="theme"][value="light"]').click();
+    assert.equal(app.doc.querySelector('.intervention textarea'),fields[0]);
+    assert.match(fields[0].value,/local coffee shop/);
     submit(app.win,app.doc.querySelector('form.intervention'));
     await waitFor(async()=>{await app.poll();return app.doc.getElementById('chat-status').textContent==='reviewed';});
     assert.match(app.doc.getElementById('brief-content').textContent,/SUCCESS CRITERIA/);
@@ -185,6 +333,9 @@ test('short mission asks questions and answers continue to a recorded result',as
     app.doc.getElementById('view-evidence').click();
     await waitFor(()=>app.doc.querySelectorAll('#activity-content details').length>0);
     assert.match(app.doc.getElementById('activity-mode').textContent,/Live Meta/);
+    assert.ok(app.doc.querySelector('.timeline-entry'));
+    app.doc.getElementById('activity-mission').value='';app.doc.getElementById('activity-mission').dispatchEvent(new app.win.Event('change'));
+    assert.match(app.doc.getElementById('activity-content').textContent,/Choose a mission/);assert.equal(app.doc.querySelector('#activity-content .timeline-entry'),null);
     assert.deepEqual(app.errors,[]);
   }finally{app.dom.window.close();}
 });

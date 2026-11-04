@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0b1220">
 <title>Collective 101 · Autonomous Organization</title>
 <link rel="stylesheet" href="/vendor/bootstrap.min.css">
 <link rel="stylesheet" href="/app.css">
@@ -25,8 +26,7 @@
   </button>
   <a href="/" class="brand" data-goto="overview">
     <span class="brand-mark" aria-hidden="true">
-      <span class="brand-letter">C</span>
-      <span class="brand-num">101</span>
+      <svg class="collective-emblem" viewBox="0 0 48 48" fill="none" stroke="currentColor" aria-hidden="true"><g class="emblem-orbits" stroke-width="1.1"><ellipse cx="24" cy="24" rx="19" ry="8" transform="rotate(-35 24 24)"/><ellipse cx="24" cy="24" rx="19" ry="8" transform="rotate(35 24 24)"/><circle cx="24" cy="24" r="15" stroke-dasharray="1 6"/></g><circle cx="24" cy="24" r="4" fill="currentColor" stroke="none"/><g fill="currentColor" stroke="none"><circle cx="24" cy="5" r="1.8"/><circle cx="35" cy="9" r="1.8"/><circle cx="42" cy="18" r="1.8"/><circle cx="42" cy="30" r="1.8"/><circle cx="35" cy="39" r="1.8"/><circle cx="24" cy="43" r="1.8"/><circle cx="13" cy="39" r="1.8"/><circle cx="6" cy="30" r="1.8"/><circle cx="6" cy="18" r="1.8"/><circle cx="13" cy="9" r="1.8"/></g></svg>
     </span>
     <span class="brand-text">
       <span class="brand-title">Collective</span>
@@ -45,7 +45,7 @@
       <span class="nav-icon" aria-hidden="true">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
       </span>
-      Overview
+      Dashboard
     </a>
     <a href="/organization" data-nav="organization" class="nav-link">
       <span class="nav-icon" aria-hidden="true">
@@ -72,6 +72,7 @@
       </span>
       Activity &amp; evidence
     </a>
+    <a href="/settings" data-nav="settings" class="nav-link settings-link"><span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m9 3-1 3-3 1-2 5 2 5 3 1 1 3h6l1-3 3-1 2-5-2-5-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></svg></span>Settings</a>
   </nav>
   <div class="sidebar-rule"></div>
   <div class="workspace-label"><span>RECENT CHATS</span></div>
@@ -83,165 +84,38 @@
 
 <div class="main-shell">
 <header class="topbar">
-  <div class="breadcrumb-label">Workspace <span>/</span> <strong id="breadcrumb">Overview</strong></div>
+  <div class="breadcrumb-label">Workspace <span>/</span> <strong id="breadcrumb">Dashboard</strong></div>
   <div class="header-status">
     <span class="status-dot" aria-hidden="true"></span>
     <span id="connection-status">Connecting</span>
-    <span class="avatar">AK</span>
+    <a class="header-settings" href="/settings" data-goto="settings" aria-label="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m9 3-1 3-3 1-2 5 2 5 3 1 1 3h6l1-3 3-1 2-5-2-5-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></svg></a>
   </div>
 </header>
 
 <main id="main" tabindex="-1">
 <div id="notice" role="alert" class="alert alert-danger d-none"></div>
 
-<section id="view-overview" class="view">
-  <div class="overview-hero">
-    <div class="overview-hero-copy">
-      <div class="overview-badge"><span class="pulse-dot" aria-hidden="true"></span> MISSION COMMAND · 101 AGENTS</div>
-      <h1>Autonomous Organization Workspace</h1>
-      <p class="lead-copy">Direct 101 persistent specialists across 10 departments. Autonomous coordination, head-led shortlists, and verified deliverable execution.</p>
+<section id="view-overview" class="view dashboard-view">
+  <div class="dashboard-heading"><div><p class="eyebrow">YOUR COLLECTIVE WORKSPACE</p><h1>The bigger picture.</h1></div><div class="dashboard-heading-note"><span class="status-dot" aria-hidden="true"></span><span>Clarity in the work. Evidence in the result.</span></div></div>
+  <div class="dashboard-hero">
+    <div class="dashboard-hero-copy"><span class="section-kicker"><span aria-hidden="true">01 /</span> A SPACE FOR WHAT’S NEXT</span><h2>Big thinking.<br><em>Beautifully coordinated.</em></h2><p>Bring your next idea to the right minds. Follow the work, shape the direction, and see the result.</p>
+      <form id="dashboard-mission" class="dashboard-launcher"><label class="visually-hidden" for="dashboard-input">Describe your next mission</label><textarea id="dashboard-input" name="mission-draft" rows="2" maxlength="12000" placeholder="What would you like to accomplish?" required></textarea><div><span>Every mission starts with you.</span><button class="btn btn-primary" type="submit">Open in Chat <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div></form>
+      <div class="dashboard-starters"><span>Try a starting point</span><button class="starter" data-example="website" type="button">Build a website</button><button class="starter" data-example="research" type="button">Explore a decision</button><button class="starter" data-example="calculator" type="button">Test JavaScript</button></div>
     </div>
-    <div class="overview-hero-actions">
-      <button class="btn btn-primary new-mission">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-        New mission
-      </button>
-    </div>
+    <button id="organization-map" class="organization-map" type="button" aria-label="Explore the organization and its 101 registered identities"><span class="map-label">ORGANIZATION MAP · DECORATIVE MOTION</span><svg id="constellation" viewBox="0 0 440 370" aria-hidden="true"></svg><span class="map-caption"><span><strong id="dashboard-agent-count">101</strong> identities. <strong id="dashboard-department-count">10</strong> departments.</span><span class="map-explore">Explore the organization <span aria-hidden="true">↗</span></span></span></button>
   </div>
-
-  <div class="launchpad-card">
-    <div class="launchpad-header">
-      <span class="mini-label">LAUNCH A MISSION</span>
-      <span class="tag">Head-led collaboration</span>
-    </div>
-    <button class="mission-prompt" id="start-chat" type="button" aria-label="Describe a task for your organization">
-      <span class="prompt-text">Describe a task or goal for your organization…</span>
-      <span class="prompt-key">Launch <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
-    </button>
-    <div class="starter-group">
-      <span class="starter-label">Quick templates:</span>
-      <button class="btn btn-light starter" data-example="website" type="button">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/></svg>
-        Build a website
-      </button>
-      <button class="btn btn-light starter" data-example="calculator" type="button">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"/></svg>
-        Test JavaScript
-      </button>
-      <button class="btn btn-light starter" data-example="research" type="button">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-        Explore a decision
-      </button>
-    </div>
+  <div class="dashboard-metrics" aria-label="Your recent workspace activity">
+    <div class="dashboard-metric"><span class="metric-index" aria-hidden="true">01</span><span>In progress</span><strong id="metric-active">0</strong><small>Currently being worked on</small></div>
+    <div class="dashboard-metric"><span class="metric-index" aria-hidden="true">02</span><span>Needs your input</span><strong id="metric-attention">0</strong><small>Decisions that move work forward</small></div>
+    <div class="dashboard-metric"><span class="metric-index" aria-hidden="true">03</span><span>Reviewed results</span><strong id="metric-reviewed">0</strong><small>In your recent mission history</small></div>
+    <div class="dashboard-metric"><span class="metric-index" aria-hidden="true">04</span><span>Recent conversations</span><strong id="metric-chats">0</strong><small id="metric-runs">Your next idea starts here</small></div>
   </div>
-
-  <div class="metrics-grid">
-    <div class="metric">
-      <div class="metric-header"><span>REGISTERED AGENTS</span></div>
-      <div>101 <small>across organization</small></div>
-      <p>1 director · 10 heads · 90 employees</p>
-    </div>
-    <div class="metric">
-      <div class="metric-header"><span>DEPARTMENTS</span></div>
-      <div>10 <small>working together</small></div>
-      <p>Specialized roles · Shared objectives</p>
-    </div>
-    <div class="metric">
-      <div class="metric-header"><span>CHAT ACTIVITY</span></div>
-      <div id="metric-active">0 <small>in progress</small></div>
-      <p id="metric-runs">No chats started yet</p>
-    </div>
-    <div class="metric">
-      <div class="metric-header"><span>EXECUTION HARNESS</span></div>
-      <div class="metric-word" id="metric-sandbox">Checking</div>
-      <p>Isolated JavaScript · Recorded results</p>
-    </div>
-  </div>
-
-  <div class="row g-4 mt-1">
-    <div class="col-xl-8">
-      <div class="panel">
-        <div class="section-heading">
-          <h2>Recent chats</h2>
-          <a href="/chat" data-goto="chat" class="view-all-link">Open chat <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
-        </div>
-        <div id="mission-list" class="empty-state">
-          <div class="empty-symbol" aria-hidden="true">
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          </div>
-          <h3>A clear starting point.</h3>
-          <p>Start your first chat to see departments, decisions, and deliverables here.</p>
-        </div>
-      </div>
-
-      <div class="panel mt-4">
-        <div class="section-heading">
-          <h2>Department Roster &amp; Specializations</h2>
-          <a href="/organization" data-goto="organization" class="view-all-link">View all 101 agents <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
-        </div>
-        <div class="overview-departments-grid">
-          <a href="/organization" data-goto="organization" class="dept-capsule">
-            <span class="dept-capsule-badge">ENG</span>
-            <div class="dept-capsule-info"><strong>Engineering &amp; Automation</strong><span>16 specialists · engineering-001</span></div>
-          </a>
-          <a href="/organization" data-goto="organization" class="dept-capsule">
-            <span class="dept-capsule-badge">DES</span>
-            <div class="dept-capsule-info"><strong>Design &amp; Media</strong><span>8 specialists · design-001</span></div>
-          </a>
-          <a href="/organization" data-goto="organization" class="dept-capsule">
-            <span class="dept-capsule-badge">RES</span>
-            <div class="dept-capsule-info"><strong>Research &amp; Intelligence</strong><span>10 specialists · research-001</span></div>
-          </a>
-          <a href="/organization" data-goto="organization" class="dept-capsule">
-            <span class="dept-capsule-badge">STR</span>
-            <div class="dept-capsule-info"><strong>Strategy &amp; Planning</strong><span>8 specialists · strategy-001</span></div>
-          </a>
-          <a href="/organization" data-goto="organization" class="dept-capsule">
-            <span class="dept-capsule-badge">DAT</span>
-            <div class="dept-capsule-info"><strong>Data &amp; Analytics</strong><span>10 specialists · data-001</span></div>
-          </a>
-          <a href="/organization" data-goto="organization" class="dept-capsule">
-            <span class="dept-capsule-badge">OPS</span>
-            <div class="dept-capsule-info"><strong>Operations &amp; Delivery</strong><span>8 specialists · operations-001</span></div>
-          </a>
-          <a href="/organization" data-goto="organization" class="dept-capsule">
-            <span class="dept-capsule-badge">COM</span>
-            <div class="dept-capsule-info"><strong>Communications &amp; Docs</strong><span>6 specialists · communications-001</span></div>
-          </a>
-          <a href="/organization" data-goto="organization" class="dept-capsule">
-            <span class="dept-capsule-badge">TLS</span>
-            <div class="dept-capsule-info"><strong>Tools &amp; Infrastructure</strong><span>10 specialists · platform-001</span></div>
-          </a>
-          <a href="/organization" data-goto="organization" class="dept-capsule">
-            <span class="dept-capsule-badge">VER</span>
-            <div class="dept-capsule-info"><strong>Verification &amp; Evaluation</strong><span>16 specialists · assurance-001</span></div>
-          </a>
-          <a href="/organization" data-goto="organization" class="dept-capsule">
-            <span class="dept-capsule-badge">DIS</span>
-            <div class="dept-capsule-info"><strong>Distribution &amp; Intake</strong><span>8 specialists · distribution-001</span></div>
-          </a>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-xl-4">
-      <div class="panel workflow-panel">
-        <div class="mini-label">HOW WORK MOVES</div>
-        <h2>From intent to evidence.</h2>
-        <ol class="workflow">
-          <li><span>01</span><div><strong>Clarify the task</strong><p>Resolve the questions that matter.</p></div></li>
-          <li><span>02</span><div><strong>Bring in the right heads</strong><p>Departments propose useful work.</p></div></li>
-          <li><span>03</span><div><strong>Assign and execute</strong><p>Employees work within their roles.</p></div></li>
-          <li><span>04</span><div><strong>Review the evidence</strong><p>Independent checks precede acceptance.</p></div></li>
-        </ol>
-        <div class="readiness-box">
-          <strong id="model-status">Checking model configuration</strong>
-          <p id="model-description">Provider availability is checked locally.</p>
-        </div>
-      </div>
-    </div>
+  <div class="dashboard-bottom"><section class="panel dashboard-recent"><div class="section-heading"><div><p class="section-kicker">PICK UP WHERE YOU LEFT OFF</p><h2>Your recent work</h2></div><button class="btn btn-outline-secondary new-mission" type="button">New mission <span aria-hidden="true">↗</span></button></div><div id="mission-list" class="dashboard-empty"><span class="empty-orbit" aria-hidden="true"></span><h3>Your next chapter is unwritten.</h3><p>Start a conversation. Your missions and results will have a home here.</p><button id="start-chat" class="btn btn-primary" type="button">Start your first mission</button></div></section>
+    <div class="dashboard-side"><section class="panel dashboard-attention"><div class="section-heading"><h2>Over to you</h2><span class="attention-symbol" aria-hidden="true">↗</span></div><div id="dashboard-attention"><p class="dashboard-caught-up">You’re all caught up.</p><p class="text-secondary small">Missions waiting for your guidance will appear here.</p></div></section>
+    <section class="panel dashboard-readiness"><p class="section-kicker">WORKSPACE READINESS</p><h2 id="model-status">Checking model configuration</h2><p id="model-description" class="readiness-description">Provider availability is checked locally.</p><a href="/connectors" data-goto="connectors" class="readiness-link">Manage connections <span aria-hidden="true">↗</span></a><div class="readiness-check"><span>JavaScript checks</span><span id="metric-sandbox">Checking</span></div><a href="/evaluations" data-goto="evaluations" class="evidence-link">Explore agent evidence <span aria-hidden="true">↗</span></a></section></div>
   </div>
 </section>
+
 
 <section id="view-organization" class="view d-none">
   <div class="page-heading compact">
@@ -270,9 +144,11 @@
     </label>
     <span id="directory-count" class="text-secondary">10 departments</span>
   </div>
+  <div class="organization-view-controls" role="group" aria-label="Organization view"><button class="btn btn-outline-secondary" type="button" data-organization-mode="map" aria-pressed="true">Explore the map</button><button class="btn btn-outline-secondary" type="button" data-organization-mode="directory" aria-pressed="false">Department directory</button><span>Real roles. Clear reporting lines.</span></div>
+  <section id="organization-explorer" class="organization-explorer" aria-label="Organization reporting map" hidden><div class="organization-map-stage"><p class="section-kicker">ONE ORGANIZATION · MANY PERSPECTIVES</p><div id="organization-network" class="organization-network"></div><p class="organization-map-caption">1 director · 10 department heads · 90 employees<br>Select a department to meet its team.</p></div><aside id="organization-details" class="organization-details" aria-label="Selected department"></aside></section>
   <div id="department-grid" class="department-grid"></div>
   <div id="search-results" class="panel d-none"></div>
-  <div id="agent-inspector" class="panel mt-4 d-none" tabindex="-1"></div>
+  <div id="agent-inspector" class="panel mt-4 d-none agent-drawer" tabindex="-1" role="dialog" aria-modal="false" aria-labelledby="agent-inspector-title"></div>
   <details class="panel mt-4">
     <summary>Shared knowledge</summary>
     <p class="small text-secondary mt-3">Add documents agents can search and read during their work. Retrieved text is sent to your configured model.</p>
@@ -343,8 +219,10 @@
   </aside>
   <div class="mission-chat-surface">
     <div id="chat-thread" class="chat-thread">
+      <details id="mission-journey" class="mission-journey" hidden></details>
       <div id="chat-messages" class="chat-messages" role="log" aria-label="Conversation" aria-live="polite"></div>
       <div id="intervention-area"></div>
+      <section id="mission-results" class="mission-results" aria-label="Saved deliverables" hidden></section>
     </div>
     <div class="chat-compose-dock">
       <div id="chat-progress" class="chat-progress d-none" role="status" aria-live="polite" aria-atomic="true">
@@ -409,7 +287,7 @@
     <p>Loading configuration...</p>
   </section>
   <div id="connector-catalog" class="connector-catalog" aria-label="Connector catalog"></div>
-  <p id="connector-empty" class="empty-state d-none" role="status">No connectors match your search. Try another name.</p>
+  <div id="connector-empty" class="empty-state d-none" role="status">No connectors match your search. Try another name.</div>
   <p class="connector-note">Coming soon connectors are previews. They cannot access your accounts yet.</p>
   <section id="connector-setup" class="panel connector-setup d-none" aria-labelledby="connector-setup-title">
     <div class="section-heading">
@@ -483,6 +361,25 @@
     <h2>No activity to inspect yet.</h2>
     <p>Start a chat or choose one from your history.</p>
   </div>
+</section>
+
+<section id="view-settings" class="view d-none settings-view">
+  <div class="page-heading compact"><div><div class="eyebrow">MAKE IT YOURS</div><h1>Your workspace, your way.</h1><p class="lead-copy">A comfortable place to do your best work.</p></div><span class="settings-instant"><span class="status-dot" aria-hidden="true"></span><span>Changes apply instantly</span></span></div>
+  <div class="settings-layout"><div class="settings-sections">
+    <section class="panel settings-panel" aria-labelledby="appearance-title"><div class="settings-section-heading"><span class="settings-section-number" aria-hidden="true">01</span><div><h2 id="appearance-title">Appearance</h2><p>Choose the atmosphere for your workspace.</p></div></div>
+      <fieldset class="theme-options"><legend class="visually-hidden">Appearance</legend>
+        <label class="theme-option"><input type="radio" name="theme" value="light"><span class="theme-thumbnail light-thumbnail" aria-hidden="true"><span></span><i><b></b><b></b><b></b></i></span><span>Light</span><span class="theme-check" aria-hidden="true">✓</span></label>
+        <label class="theme-option"><input type="radio" name="theme" value="dark"><span class="theme-thumbnail dark-thumbnail" aria-hidden="true"><span></span><i><b></b><b></b><b></b></i></span><span>Dark</span><span class="theme-check" aria-hidden="true">✓</span></label>
+        <label class="theme-option"><input type="radio" name="theme" value="system"><span class="theme-thumbnail system-thumbnail" aria-hidden="true"><span></span><i><b></b><b></b><b></b></i></span><span>System</span><span class="theme-check" aria-hidden="true">✓</span></label>
+      </fieldset><p class="settings-help">Follow your device</p>
+    </section>
+    <section class="panel settings-panel" aria-labelledby="language-title"><div class="settings-section-heading"><span class="settings-section-number" aria-hidden="true">02</span><div><h2 id="language-title">Language &amp; reading</h2><p>Small details that make work feel easier.</p></div></div>
+      <div class="preference-row"><div><label for="setting-language">Interface language</label><p id="language-help">Navigation and preferences are translated. Agent content stays in its original language.</p></div><select id="setting-language" name="language" class="form-select" aria-describedby="language-help"><option value="en">English</option></select></div>
+      <div class="preference-row"><label for="setting-text-size">Text size</label><select id="setting-text-size" name="text-size" class="form-select"><option value="default">Default</option><option value="large">Larger</option></select></div>
+    </section>
+    <section class="panel settings-panel" aria-labelledby="accessibility-title"><div class="settings-section-heading"><span class="settings-section-number" aria-hidden="true">03</span><div><h2 id="accessibility-title">Accessibility</h2><p>Keep your workspace comfortable.</p></div></div><div class="preference-row"><div><label for="setting-reduce-motion">Reduce motion</label><p id="motion-help">Limit decorative animation. Your device’s reduced-motion preference is always respected.</p></div><input id="setting-reduce-motion" name="reduce-motion" class="preference-switch" type="checkbox" role="switch" aria-describedby="motion-help"></div></section>
+    <div class="settings-footer"><p id="preferences-status" role="status" aria-live="polite">Preferences are saved in this browser.</p><button id="reset-preferences" class="btn btn-outline-secondary" type="button">Reset preferences</button></div>
+  </div><aside class="settings-aside" aria-label="Workspace preview"><div class="workspace-preview"><div class="preview-topline"><span aria-hidden="true">● ● ●</span><span>Workspace preview</span></div><div class="preview-content"><div class="preview-orbit" aria-hidden="true"><i></i><i></i><b></b></div><h2>A space for your next big idea.</h2><p>Research, build, and deliver with a team that fits the mission.</p><div class="preview-message" aria-hidden="true"><span></span><span></span><span></span></div><div class="preview-composer" aria-hidden="true"><span></span><b>↑</b></div></div></div><div class="settings-connection-note"><h2>Model &amp; connections</h2><p>Manage model credentials and connected tools in Connectors.</p><a href="/connectors" data-goto="connectors">Open Connectors</a><span aria-hidden="true"> ↗</span></div></aside></div>
 </section>
 
 <footer>COLLECTIVE 101 <span>Clarity in the work. Evidence in the result.</span></footer>
