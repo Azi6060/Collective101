@@ -23,10 +23,13 @@ class InterfaceHttpTest(unittest.TestCase):
                 def get(path,headers=None):
                     with urllib.request.urlopen(urllib.request.Request(origin+path,headers=headers or {}),timeout=5) as response:return response.read()
                 for path in ('/','/dashboard','/settings'):
-                    self.assertIn(b'id="view-settings"',get(path))
+                    page=get(path)
+                    self.assertIn(b'id="view-settings"',page)
+                    self.assertIn(b'id="view-home"',page)
+                    self.assertNotIn(b'class="workspace-preview"',page)
                 script=get('/app.js');self.assertIn(b'CollectivePreferences',script);self.assertIn(b'CollectiveDashboard',script);self.assertIn(b'CollectiveLocales',script)
                 self.assertLess(script.index(b'window.CollectiveLocales ='),script.index(b'window.CollectivePreferences ='))
-                self.assertIn(b'.dashboard-hero',get('/app.css'))
+                self.assertIn(b'.dashboard-launch-card',get('/app.css'))
                 token=json.loads(get('/api/session'))['token']
                 health=json.loads(get('/api/health',{'X-Console-Token':token}))
                 self.assertTrue(health['features']['orbital_workspace'])
@@ -36,6 +39,10 @@ class InterfaceHttpTest(unittest.TestCase):
                 self.assertIn(b'CollectiveMissionUI',script)
                 self.assertIn(b'CollectiveExplorer',script)
                 self.assertIn(b'CollectiveThumbnails',script)
+                self.assertIn(b'CollectiveVoiceRecording',script)
+                self.assertIn(b'CollectiveDrafts',script);self.assertIn(b'CollectiveWorkspaceTools',script);self.assertIn(b'CollectiveUploads',script)
+                self.assertTrue(health['features']['workspace_tools'])
+                self.assertLess(script.index(b'window.CollectiveVoiceRecording='),script.index(b'window.CollectiveChatInputs='))
                 self.assertEqual(health['active_chats'],0)
             finally:server.shutdown();server.server_close();service.close();thread.join()
 

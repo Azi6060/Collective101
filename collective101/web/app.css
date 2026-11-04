@@ -2386,14 +2386,14 @@ summary:focus-visible {
     flex-direction: column;
   }
 
-  .brand,
-  .sidebar-collapsed .brand {
+  .sidebar .brand,
+  .sidebar-collapsed .sidebar .brand {
     margin: 44px 0 20px;
     padding: 0;
     justify-content: center;
   }
 
-  .brand-text,
+  .sidebar .brand-text,
   .sidebar .nav-label,
   .sidebar .workspace-label,
   .sidebar .sidebar-rule,

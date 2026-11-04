@@ -15,7 +15,7 @@ export function auditTextContrast() {
   const luminance = rgba => rgba.slice(0,3).map(channel=>channel/255).map(channel=>channel<=.04045?channel/12.92:((channel+.055)/1.055)**2.4).reduce((sum,channel,i)=>sum+channel*[.2126,.7152,.0722][i],0);
   const contrast = (front,back) => {const a=luminance(over(front,back)),b=luminance(back);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);};
   const failures=[];let checked=0;
-  const scope=[document.querySelector('.sidebar'),document.querySelector('.topbar'),document.querySelector('.view:not(.d-none)'),document.querySelector('dialog[open]')].filter(Boolean);
+  const scope=[document.querySelector('.topbar'),document.querySelector('.view:not(.d-none)'),document.querySelector('dialog[open]')].filter(Boolean);
   for(const section of scope)for(const element of [section,...section.querySelectorAll('*')]) {
     if(!element.getClientRects().length||element.closest('[aria-hidden="true"],script,style,svg,[disabled]'))continue;
     let hiddenByDisclosure=false;

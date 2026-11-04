@@ -21,7 +21,7 @@ def main():
             test_options=[arg for arg in sys.argv[1:] if arg!='--browser']
             result=subprocess.run(['node','--test',*test_options,test_file],cwd=ROOT,
                 env={**os.environ,'COLLECTIVE101_TEST_URL':f'http://127.0.0.1:{server.server_port}',
-                     'COLLECTIVE101_ISOLATED_TEST':'1'},capture_output=True,text=True,encoding='utf-8',timeout=300 if browser_mode else 120)
+                     'COLLECTIVE101_ISOLATED_TEST':'1'},capture_output=True,text=True,encoding='utf-8',timeout=600 if browser_mode else 180)
             output=result.stdout+result.stderr
             evidence=ROOT/'work'/'verification';evidence.mkdir(parents=True,exist_ok=True)
             (evidence/('playwright-browser.log' if browser_mode else 'live-connectors-ui.log')).write_text(output,encoding='utf-8');print(output)

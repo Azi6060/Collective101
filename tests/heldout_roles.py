@@ -6,6 +6,8 @@ from collective101.registry import DEPARTMENTS, ROLES, build_roster
 
 COMMON_TOOLS = {"knowledge_read", "knowledge_search", "memory_search"}
 EXECUTION_DEPARTMENTS = {"engineering", "data", "assurance", "platform"}
+BROWSER_DEPARTMENTS = {"engineering", "design", "assurance", "platform"}
+NODE_BUILD_DEPARTMENTS = {"engineering", "assurance", "platform"}
 SEARCH_DEPARTMENTS = {"research", "strategy", "assurance", "platform"}
 
 
@@ -32,8 +34,14 @@ def evaluate_roles():
             expected_role = "department_lead" if is_head else None
             expected_manager = "director-001" if is_head else f"{department.id}-001"
             ceiling = set(COMMON_TOOLS)
+            # Independent expectations for the current bounded execution profiles;
+            # do not derive the oracle from eligible_tools(), which it checks.
             if department.id in EXECUTION_DEPARTMENTS:
-                ceiling.update({"javascript_sandbox", "sql_sandbox"})
+                ceiling.update({"javascript_sandbox", "sql_sandbox", "python_sandbox"})
+            if department.id in BROWSER_DEPARTMENTS:
+                ceiling.add("browser_sandbox")
+            if department.id in NODE_BUILD_DEPARTMENTS:
+                ceiling.add("node_build_sandbox")
             if department.id in SEARCH_DEPARTMENTS:
                 ceiling.add("web_search")
             if not is_head and agent["role"] not in ROLES:

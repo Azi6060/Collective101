@@ -3,24 +3,25 @@ import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {connectBrowser,inspect,waitUntil,waitReady,resultText} from '../scripts/playwright-mcp-client.mjs';
 import {auditTextContrast} from './contrast-audit.mjs';
-import {writeFile} from 'node:fs/promises';
+import {writeFile,mkdir} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
 const base=process.env.COLLECTIVE101_TEST_URL;
 assert.ok(base&&process.env.COLLECTIVE101_ISOLATED_TEST==='1','Run npm run test:browser with the isolated Python service');
 assert.notEqual(new URL(base).port,'8765','Never run interaction tests on the user app');
 let browser;
-before(async()=>{browser=await connectBrowser(base,{allowLoopbackPreviews:true});await browser.call('browser_navigate',{url:base+'/'});await waitReady(browser);await browser.call('browser_take_screenshot',{filename:'work/playwright/orbital-dashboard-initial.png',scale:'css',fullPage:true});await browser.call('browser_navigate',{url:base+'/chat'});await waitReady(browser);});
+before(async()=>{browser=await connectBrowser(base,{allowLoopbackPreviews:true,syntheticAudio:process.env.COLLECTIVE101_TEST_AUDIO==='1'});await browser.call('browser_navigate',{url:base+'/'});await waitReady(browser);await browser.call('browser_take_screenshot',{filename:'work/playwright/orbital-dashboard-initial.png',scale:'css',fullPage:true});await browser.call('browser_navigate',{url:base+'/chat'});await waitReady(browser);});
 after(async()=>{await browser?.close();});
 const click=target=>browser.call('browser_click',{target});
 const type=(target,text)=>browser.call('browser_type',{target,text});
 const shot=name=>browser.call('browser_take_screenshot',{filename:`work/playwright/test-${name}.png`,scale:'css',fullPage:true});
 async function newChat(){await click('#new-chat');}
+async function openConnectors(){await click('[data-nav="settings"]');await click('#settings-connectors');}
 
 test('desktop and mobile composer stays visible, grows, caps and shrinks',async()=>{
-  assert.equal(await inspect(browser,()=>getComputedStyle(document.querySelector('.topbar')).display),'none');
+  assert.equal(await inspect(browser,()=>getComputedStyle(document.querySelector('.topbar')).display),'grid');
   assert.equal(await inspect(browser,()=>!!document.querySelector('#view-chat .chat-toolbar')),false);
-  assert.equal(await inspect(browser,()=>!!document.querySelector('.sidebar #new-chat')),true);
-  await click('#toggle-sidebar');
-  assert.ok(await inspect(browser,()=>document.querySelector('.sidebar').getBoundingClientRect().width<=70));
+  assert.equal(await inspect(browser,()=>!!document.querySelector('.app-header #new-chat')),true);
+  assert.equal(await inspect(browser,()=>!!document.querySelector('.sidebar,#connection-status')),false);
   const initial=await inspect(browser,()=>({height:document.querySelector('#mission-input').clientHeight,resize:getComputedStyle(document.querySelector('#mission-input')).resize}));
   assert.equal(initial.resize,'none');assert.ok(initial.height>0);
   await type('#mission-input',Array(25).fill('A longer line for composer layout').join('\n'));
@@ -39,6 +40,7 @@ test('desktop and mobile composer stays visible, grows, caps and shrinks',async(
     await browser.call('browser_resize',{width,height:844});
     const layout=await inspect(browser,()=>({width:document.documentElement.scrollWidth,viewport:innerWidth,bottom:document.querySelector('#mission-form').getBoundingClientRect().bottom,height:innerHeight}));
     assert.ok(layout.width<=layout.viewport&&layout.bottom<=layout.height,JSON.stringify(layout));
+    assert.equal(await inspect(browser,()=>getComputedStyle(document.querySelector('.app-header .brand-text')).display),'flex');
   }
   await browser.call('browser_resize',{width:1440,height:1000});
 });
@@ -48,6 +50,34 @@ test('Hi gets a provider reply without clarification or department work',async()
   await waitUntil(browser,()=>document.querySelector('#chat-status').textContent==='answered','greeting reply');
   const result=await inspect(browser,()=>({text:document.querySelector('#chat-messages').textContent,questions:document.querySelectorAll('.intervention textarea').length,controls:document.querySelector('#mission-controls').classList.contains('d-none')}));
   assert.match(result.text,/Hello from the scripted test provider/);assert.equal(result.questions,0);assert.equal(result.controls,true);
+});
+
+test('top navigation keeps saved chats accessible and opens connectors through Settings',async()=>{
+  if(!await inspect(browser,()=>!!document.querySelector('#recent-missions button'))){
+    await newChat();await type('#mission-input','Hi');await click('#send-mission');
+    await waitUntil(browser,()=>document.querySelector('#chat-status').textContent==='answered','scripted saved chat');
+  }
+  await waitUntil(browser,()=>!!document.querySelector('#recent-missions button'),'saved chat history');
+  await click('#chat-history>summary');
+  await browser.call('browser_press_key',{key:'Tab'});
+  assert.equal(await inspect(browser,()=>document.activeElement.id),'history-search');
+  await browser.call('browser_press_key',{key:'ArrowDown'});
+  assert.ok(await inspect(browser,()=>!!document.activeElement.dataset.chatId));
+  await browser.call('browser_press_key',{key:'Escape'});
+  assert.deepEqual(await inspect(browser,()=>({open:document.querySelector('#chat-history').open,focus:document.activeElement===document.querySelector('#chat-history>summary')})),{open:false,focus:true});
+  await click('#chat-history>summary');await click('#recent-missions button:first-child');
+  await waitUntil(browser,()=>!document.querySelector('#chat-history').open,'saved chat opens');
+  await openConnectors();
+  assert.equal(await inspect(browser,()=>document.querySelector('.app-header [data-nav="settings"]').getAttribute('aria-current')),'location');
+  assert.equal(await inspect(browser,()=>document.querySelector('.primary-nav [data-nav="connectors"]')),null);
+  await click('#view-connectors .settings-back');
+  assert.equal(await inspect(browser,()=>location.pathname),'/settings');
+  await browser.call('browser_resize',{width:320,height:568});
+  await click('#chat-history>summary');
+  const panel=await inspect(browser,()=>({left:document.querySelector('.history-panel').getBoundingClientRect().left,right:document.querySelector('.history-panel').getBoundingClientRect().right,width:innerWidth}));
+  assert.ok(panel.left>=0&&panel.right<=panel.width,JSON.stringify(panel));
+  await shot('top-navigation-mobile-history');
+  await browser.call('browser_press_key',{key:'Escape'});await browser.call('browser_resize',{width:1440,height:1000});await click('[data-nav="chat"]');
 });
 
 test('activity hint is visible outside the transcript and clears on completion',async()=>{
@@ -190,7 +220,9 @@ test('organization and connector catalog support search, roles and keyboard dism
   await click('[data-organization-mode="directory"]');
   await type('#agent-search','research-003');await click('#search-results button');
   assert.match(await inspect(browser,()=>document.querySelector('#agent-inspector').textContent),/web_search/);
-  await click('[data-nav="connectors"]');
+  const drawerPosition=await inspect(browser,()=>({top:document.querySelector('#agent-inspector').getBoundingClientRect().top,headerBottom:document.querySelector('.app-header').getBoundingClientRect().bottom}));
+  assert.ok(drawerPosition.top>=drawerPosition.headerBottom,JSON.stringify(drawerPosition));
+  await openConnectors();
   await waitUntil(browser,()=>document.querySelectorAll('.connector-card').length===9,'connector cards');
   assert.equal(await inspect(browser,()=>document.querySelectorAll('.connector-icon svg').length),9);await shot('visual-connector-icons');
   await waitUntil(browser,()=>document.querySelector('#model-configuration').textContent.includes('No credential detected'),'model provenance panel');
@@ -226,13 +258,26 @@ test('Effectiveness page shows untested role evidence, explicit credit controls 
   assert.match(errors,/Errors: 0, Warnings: 0/);
 });
 
-test('orbital dashboard uses the real roster and opens a mission draft',async()=>{
-  await click('[data-nav="overview"]');
-  if(await inspect(browser,()=>document.querySelector('.sidebar').getBoundingClientRect().width<100))await click('#toggle-sidebar');
+test('home welcomes visitors and its single-card dashboard opens a mission draft',async()=>{
+  await click('[data-nav="home"]');
+  assert.equal(await inspect(browser,()=>location.pathname),'/');
+  assert.equal(await inspect(browser,()=>document.querySelectorAll('#home-departments li').length),10);
   assert.equal(await inspect(browser,()=>document.querySelectorAll('.constellation-employee').length),90);
   assert.equal(await inspect(browser,()=>document.querySelectorAll('.constellation-head').length),10);
-  await shot('orbital-dashboard-dark');
+  assert.equal(await inspect(browser,()=>!!document.querySelector('.workspace-preview,.settings-aside')),false);
+  await shot('home-dark');
+  await click('#home-enter');
+  assert.equal(await inspect(browser,()=>location.pathname),'/dashboard');
+  const dashboard=await inspect(browser,()=>({cards:document.querySelectorAll('#view-overview .dashboard-launch-card').length,extras:!!document.querySelector('#view-overview .dashboard-metrics,#view-overview .dashboard-bottom,#view-overview #organization-map'),height:document.querySelector('#dashboard-input').clientHeight}));
+  assert.equal(dashboard.cards,1);assert.equal(dashboard.extras,false);assert.ok(dashboard.height>=180);
+  await click('[data-nav="home"]');await click('#home-get-started a');
+  assert.equal(await inspect(browser,()=>location.pathname),'/dashboard');
+  assert.ok(await inspect(browser,()=>scrollY<=1),'The bottom Home action opens the dashboard at its welcoming heading');
+  await shot('single-card-dashboard-dark');
   await type('#dashboard-input','Prepare an onboarding guide for a small product team.');
+  await click('[data-nav="home"]');await browser.call('browser_navigate_back');
+  assert.equal(await inspect(browser,()=>location.pathname),'/dashboard');
+  assert.equal(await inspect(browser,()=>document.querySelector('#dashboard-input').value),'Prepare an onboarding guide for a small product team.');
   await click('#dashboard-mission button');
   assert.equal(await inspect(browser,()=>document.querySelector('#mission-input').value),'Prepare an onboarding guide for a small product team.');
   assert.equal(await inspect(browser,()=>document.querySelectorAll('#chat-messages .message').length),0);
@@ -259,8 +304,9 @@ test('orbital Settings supports keyboard appearance, 14 languages, reload and Ar
   await shot('orbital-settings-arabic-mobile');
   const rtlLayout=await inspect(browser,()=>({width:document.documentElement.scrollWidth,viewport:innerWidth}));
   assert.ok(rtlLayout.width<=rtlLayout.viewport,JSON.stringify(rtlLayout));
-  await click('#toggle-sidebar');assert.ok(await inspect(browser,()=>document.querySelector('.sidebar').getBoundingClientRect().width>200));
-  await browser.call('browser_press_key',{key:'Escape'});assert.ok(await inspect(browser,()=>document.querySelector('.sidebar').getBoundingClientRect().width<70));
+  assert.equal(await inspect(browser,()=>getComputedStyle(document.querySelector('.primary-nav')).overflowX),'auto');
+  await click('#chat-history>summary');await browser.call('browser_press_key',{key:'Escape'});
+  assert.equal(await inspect(browser,()=>document.activeElement===document.querySelector('#chat-history>summary')),true);
   await browser.call('browser_resize',{width:1440,height:1000});await click('#reset-preferences');
   assert.equal(await inspect(browser,()=>document.documentElement.lang),'en');
 });
@@ -269,8 +315,8 @@ test('orbital workspace views fit screen sizes and sampled text meets contrast t
   const evidence=[],layoutFailures=[];
   for(const theme of ['dark','light']){
     await click('[data-nav="settings"]');await click(`.theme-option:has(input[value="${theme}"])`);
-    for(const view of ['overview','organization','chat','connectors','activity','evaluations','settings']){
-      await click(`[data-nav="${view}"]`);
+    for(const view of ['home','overview','organization','chat','connectors','activity','evaluations','settings']){
+      if(view==='connectors')await openConnectors();else await click(`[data-nav="${view}"]`);
       if(view==='evaluations')await waitUntil(browser,()=>document.querySelector('#evaluation-agents tr'));
       for(const [width,height] of theme==='dark'?[[320,568],[768,1024],[1440,1000]]:[[390,844],[1440,1000]]){
         await browser.call('browser_resize',{width,height});
@@ -282,7 +328,7 @@ test('orbital workspace views fit screen sizes and sampled text meets contrast t
         if(view==='chat'&&layout.bottom>layout.height)layoutFailures.push({theme,view,viewport:width,composer:layout});
       }
       const audit=await inspect(browser,auditTextContrast);evidence.push({theme,view,...audit});
-      if(['overview','settings'].includes(view))await shot('orbital-'+view+'-'+theme);
+      if(['home','overview','settings'].includes(view))await shot('orbital-'+view+'-'+theme);
     }
   }
   await writeFile(new URL('../work/playwright/orbital-contrast.json',import.meta.url),JSON.stringify(evidence,null,2));
@@ -297,7 +343,7 @@ test('ambient motion stays sharp on hover, runs continuously and respects both r
   try {
     await browser.call('browser_emulate_media',{reducedMotion:'no-preference'});
     await click('[data-nav="settings"]');await click('#reset-preferences');
-    await browser.call('browser_navigate',{url:base+'/dashboard'});await waitReady(browser);
+    await browser.call('browser_navigate',{url:base+'/'});await waitReady(browser);
     evidence.intro=await inspect(browser,()=>{
       const sweep=document.querySelector('.constellation-sweep');
       return {name:getComputedStyle(sweep).animationName,animations:sweep.getAnimations().map(animation=>({state:animation.playState,duration:animation.effect.getTiming().duration,iterations:animation.effect.getTiming().iterations,properties:[...new Set(animation.effect.getKeyframes().flatMap(frame=>Object.keys(frame)))].filter(key=>!['offset','computedOffset','easing','composite'].includes(key))}))};
@@ -307,8 +353,10 @@ test('ambient motion stays sharp on hover, runs continuously and respects both r
     assert.deepEqual(sweep.properties.sort(),['opacity','transform']);
     evidence.ambient=await inspect(browser,()=>({state:document.documentElement.dataset.ambientMotion,orbits:[...document.querySelectorAll('.ambient-orbit')].map(node=>({name:getComputedStyle(node).animationName,running:node.getAnimations().some(animation=>animation.playState==='running'),continuous:node.getAnimations().some(animation=>animation.effect.getTiming().iterations===Infinity)}))}));
     assert.equal(evidence.ambient.state,'running');assert.equal(evidence.ambient.orbits.length,3);assert.ok(evidence.ambient.orbits.every(orbit=>orbit.running&&orbit.continuous));
+    evidence.brand=await inspect(browser,()=>[...document.querySelectorAll('.brand-101 i')].map(node=>({running:node.getAnimations().some(animation=>animation.playState==='running'),continuous:node.getAnimations().some(animation=>animation.effect.getTiming().iterations===Infinity)})));
+    assert.equal(evidence.brand.length,3);assert.ok(evidence.brand.every(digit=>digit.running&&digit.continuous));
     await waitUntil(browser,()=>document.querySelector('.ambient-orbit').getAnimations()[0]?.currentTime>800,'orbit advances');
-    await shot('ambient-dashboard-running');
+    await shot('ambient-home-running');
     evidence.beforeHover=await inspect(browser,()=>({transform:getComputedStyle(document.querySelector('#constellation')).transform,filter:getComputedStyle(document.querySelector('#constellation')).filter,width:document.querySelector('#constellation').getBoundingClientRect().width}));
     await browser.call('browser_hover',{target:'#organization-map'});
     evidence.afterHover=await inspect(browser,()=>({transform:getComputedStyle(document.querySelector('#constellation')).transform,filter:getComputedStyle(document.querySelector('#constellation')).filter,width:document.querySelector('#constellation').getBoundingClientRect().width}));
@@ -317,32 +365,158 @@ test('ambient motion stays sharp on hover, runs continuously and respects both r
     assert.equal(await inspect(browser,()=>document.querySelectorAll('[data-motion-toggle],.cluster-atmosphere text').length),0);
     assert.equal(await inspect(browser,()=>document.querySelector('.ambient-orbit').getAnimations()[0]?.playState),'running');
     await shot('sharp-map-hover');
-    await browser.call('browser_navigate',{url:base+'/dashboard'});await waitReady(browser);
+    await browser.call('browser_navigate',{url:base+'/'});await waitReady(browser);
     assert.equal(await inspect(browser,()=>document.documentElement.dataset.ambientMotion),'running');
     await browser.call('browser_resize',{width:320,height:568});
-    assert.equal(await inspect(browser,()=>document.documentElement.scrollWidth<=innerWidth),true);await shot('ambient-dashboard-mobile');
-    await browser.call('browser_hover',{target:'#model-status'});
-    await waitUntil(browser,()=>document.querySelector('.dashboard-hero').classList.contains('motion-offscreen'),'offscreen scene suspends');
+    assert.equal(await inspect(browser,()=>document.documentElement.scrollWidth<=innerWidth),true);await shot('ambient-home-mobile');
+    await browser.call('browser_hover',{target:'#home-get-started'});
+    await waitUntil(browser,()=>document.querySelector('.home-hero').classList.contains('motion-offscreen'),'offscreen scene suspends');
     assert.equal(await inspect(browser,()=>document.querySelector('.ambient-orbit').getAnimations()[0]?.playState),'paused');
     await browser.call('browser_hover',{target:'#organization-map'});
     await waitUntil(browser,()=>document.querySelector('.ambient-orbit').getAnimations()[0]?.playState==='running','scene resumes when visible');
     await browser.call('browser_resize',{width:1440,height:1000});
-    await click('[data-nav="settings"]');await click('#setting-reduce-motion');await click('[data-nav="overview"]');
+    await click('[data-nav="settings"]');await click('#setting-reduce-motion');await click('[data-nav="home"]');
     await browser.call('browser_hover',{target:'#organization-map'});
-    evidence.setting=await inspect(browser,()=>({enabled:document.documentElement.dataset.reduceMotion,animation:getComputedStyle(document.querySelector('.constellation-sweep')).animationName,transform:getComputedStyle(document.querySelector('#constellation')).transform,active:document.querySelector('#view-overview').getAnimations({subtree:true}).length}));
-    assert.deepEqual(evidence.setting,{enabled:'true',animation:'none',transform:'none',active:0});
+    evidence.setting=await inspect(browser,()=>({enabled:document.documentElement.dataset.reduceMotion,animation:getComputedStyle(document.querySelector('.constellation-sweep')).animationName,transform:getComputedStyle(document.querySelector('#constellation')).transform,active:document.querySelector('#view-home').getAnimations({subtree:true}).length,brandActive:document.querySelector('.brand-101').getAnimations({subtree:true}).length}));
+    assert.deepEqual(evidence.setting,{enabled:'true',animation:'none',transform:'none',active:0,brandActive:0});
     await click('[data-nav="settings"]');await click('#setting-reduce-motion');
-    await browser.call('browser_emulate_media',{reducedMotion:'reduce'});await click('[data-nav="overview"]');
+    await browser.call('browser_emulate_media',{reducedMotion:'reduce'});await click('[data-nav="home"]');
     await browser.call('browser_hover',{target:'#organization-map'});
-    evidence.device=await inspect(browser,()=>({matches:matchMedia('(prefers-reduced-motion: reduce)').matches,animation:getComputedStyle(document.querySelector('.constellation-sweep')).animationName,transform:getComputedStyle(document.querySelector('#constellation')).transform,active:document.querySelector('#view-overview').getAnimations({subtree:true}).length}));
-    assert.deepEqual(evidence.device,{matches:true,animation:'none',transform:'none',active:0});
+    evidence.device=await inspect(browser,()=>({matches:matchMedia('(prefers-reduced-motion: reduce)').matches,animation:getComputedStyle(document.querySelector('.constellation-sweep')).animationName,transform:getComputedStyle(document.querySelector('#constellation')).transform,active:document.querySelector('#view-home').getAnimations({subtree:true}).length,brandActive:document.querySelector('.brand-101').getAnimations({subtree:true}).length}));
+    assert.deepEqual(evidence.device,{matches:true,animation:'none',transform:'none',active:0,brandActive:0});
     await browser.call('browser_resize',{width:390,height:844});
     assert.equal(await inspect(browser,()=>document.documentElement.scrollWidth<=innerWidth),true);await shot('motion-reduced-mobile');
     await writeFile(new URL('../work/playwright/motion-evidence.json',import.meta.url),JSON.stringify(evidence,null,2));
   } finally {
     await browser.call('browser_emulate_media',{reducedMotion:null});
     await browser.call('browser_resize',{width:1440,height:1000});
-    await click('[data-nav="settings"]');await click('#reset-preferences');await click('[data-nav="overview"]');
+    await click('[data-nav="settings"]');await click('#reset-preferences');await click('[data-nav="home"]');
   }
   const errors=resultText(await browser.call('browser_console_messages',{level:'warning',all:true}));assert.match(errors,/Errors: 0, Warnings: 0/);
+});
+
+test('chat uploads text and video references through the file picker and presents a keyboard workbench',async()=>{
+  await browser.call('browser_resize',{width:1440,height:1000});await newChat();
+  const directory=new URL('../work/playwright/upload-fixtures/',import.meta.url);await mkdir(directory,{recursive:true});
+  const notes=new URL('browser-notes.txt',directory),video=new URL('browser-reference.mp4',directory);
+  await writeFile(notes,'Actual browser upload reference.');await writeFile(video,Buffer.from([0,0,0,24,102,116,121,112,109,112,52,50,0,0,0,0,0,0,0,0,0,0,0,0]));
+  await click('#attach-files');await browser.call('browser_file_upload',{paths:[fileURLToPath(notes),fileURLToPath(video)]});
+  await waitUntil(browser,()=>document.querySelectorAll('.attachment-chip').length===2&&!document.querySelector('#attach-files').disabled||!!document.querySelector('#upload-queue [data-state="failed"]'),'completed uploads');
+  assert.equal(await inspect(browser,()=>document.querySelectorAll('.attachment-chip').length),2,await inspect(browser,()=>document.querySelector('#upload-queue').textContent));
+  assert.match(await inspect(browser,()=>document.querySelector('#composer-attachments').textContent),/Reference only/);
+  await shot('chat-draft-uploads');await type('#mission-input','Hi');await click('#send-mission');
+  await waitUntil(browser,()=>document.querySelector('#chat-status').textContent==='answered','scripted attachment response');
+  assert.equal(await inspect(browser,()=>document.querySelectorAll('.message-attachments .reference-file').length),2);
+  await click('#chat-inspector>summary');await click('#workspace-tab-references');
+  assert.equal(await inspect(browser,()=>document.querySelector('#workspace-panel-references').hidden),false);
+  await shot('chat-reference-workbench');
+  await click('#workspace-references .reference-file:first-child button');
+  assert.match(await inspect(browser,()=>document.querySelector('#attachment-preview').textContent),/Actual browser upload reference/);
+  assert.deepEqual((await inspect(browser,auditTextContrast)).failures,[]);await shot('chat-upload-source-preview');
+  await browser.call('browser_press_key',{key:'Escape'});
+  assert.equal(await inspect(browser,()=>document.activeElement.getAttribute('aria-label')),'View browser-notes.txt');
+  await click('#workspace-tab-references');await browser.call('browser_press_key',{key:'ArrowRight'});
+  assert.equal(await inspect(browser,()=>document.activeElement.id),'workspace-tab-activity');
+  await browser.call('browser_resize',{width:320,height:568});
+  const compact=await inspect(browser,()=>({width:document.documentElement.scrollWidth,viewport:innerWidth,bottom:document.querySelector('#mission-form').getBoundingClientRect().bottom,height:innerHeight}));
+  assert.ok(compact.width<=compact.viewport&&compact.bottom<=compact.height,JSON.stringify(compact));await shot('chat-workbench-mobile');
+  await browser.call('browser_resize',{width:1440,height:1000});await newChat();
+});
+
+test('saved-work search and rename find real uploaded filenames and keep the inspector filters usable',async()=>{
+  await newChat();const folder=new URL('../work/playwright/upload-fixtures/',import.meta.url);await mkdir(folder,{recursive:true});
+  const reference=new URL('wrapup-search-reference.txt',folder);await writeFile(reference,'Scripted browser search reference.');
+  await click('#attach-files');await browser.call('browser_file_upload',{paths:[fileURLToPath(reference)]});await waitUntil(browser,()=>document.querySelectorAll('.attachment-chip').length===1,'reference uploaded');
+  await type('#mission-input','Hi');await click('#send-mission');await waitUntil(browser,()=>document.querySelector('#chat-status').textContent==='answered','saved search chat');
+  await click('#chat-inspector>summary');await click('#rename-chat');await type('#rename-title','Teammate review workspace');await click('#rename-save');
+  await waitUntil(browser,()=>document.querySelector('#workspace-title').textContent==='Teammate review workspace'&&!document.querySelector('#rename-dialog').open,'renamed chat');
+  assert.equal(await inspect(browser,()=>document.activeElement.id),'rename-chat');
+  await click('#chat-history>summary');await type('#history-search','wrapup-search-reference');await browser.call('browser_press_key',{key:'Enter'});
+  await waitUntil(browser,()=>document.querySelector('#recent-missions').textContent.includes('wrapup-search-reference.txt'),'filename search result');
+  assert.deepEqual((await inspect(browser,auditTextContrast)).failures,[]);await shot('wrapup-search-results');
+  await click('#recent-missions button');await waitUntil(browser,()=>!document.querySelector('#workspace-panel-references').hidden&&!document.querySelector('#chat-history').open,'matching file workspace');
+  assert.equal(await inspect(browser,()=>document.querySelectorAll('#workspace-references .reference-file').length),1);
+  await type('#workspace-file-search','unmatched-needle');assert.equal(await inspect(browser,()=>document.querySelectorAll('#workspace-references .reference-file').length),0);
+  await type('#workspace-file-search','wrapup');await shot('wrapup-file-filter');
+  assert.equal(await inspect(browser,()=>getComputedStyle(document.querySelector('#preview-project')).backgroundColor),await inspect(browser,()=>getComputedStyle(document.body).backgroundColor));
+  await click('[data-nav="settings"]');await click('.theme-option:has(input[value="light"])');await click('[data-nav="chat"]');
+  assert.equal(await inspect(browser,()=>getComputedStyle(document.querySelector('#preview-project')).backgroundColor),await inspect(browser,()=>getComputedStyle(document.body).backgroundColor));
+  assert.deepEqual((await inspect(browser,auditTextContrast)).failures,[]);await shot('wrapup-file-filter-light');
+  await click('[data-nav="settings"]');await click('#reset-preferences');await click('[data-nav="chat"]');
+  await click('#chat-history>summary');await type('#history-search','');await browser.call('browser_press_key',{key:'Enter'});await browser.call('browser_press_key',{key:'Escape'});await newChat();
+});
+
+test('unfinished drafts and completed attachments survive refresh and stay separate between conversations',async()=>{
+  await newChat();await type('#mission-input','Unfinished new-chat draft for review.');
+  await mkdir(new URL('../work/playwright/upload-fixtures/',import.meta.url),{recursive:true});
+  const file=new URL('../work/playwright/upload-fixtures/wrapup-draft-reference.txt',import.meta.url);await writeFile(file,'Scripted browser draft recovery reference.');
+  await click('#attach-files');await browser.call('browser_file_upload',{paths:[fileURLToPath(file)]});await waitUntil(browser,()=>document.querySelectorAll('.attachment-chip').length===1,'recoverable uploaded reference');
+  await browser.call('browser_navigate',{url:base+'/chat'});await waitReady(browser);
+  assert.equal(await inspect(browser,()=>document.querySelector('#mission-input').value),'Unfinished new-chat draft for review.');
+  assert.equal(await inspect(browser,()=>document.querySelectorAll('.attachment-chip').length),1);assert.equal(await inspect(browser,()=>document.querySelector('#draft-recovery').hidden),false);
+  await shot('wrapup-restored-draft');await click('#chat-history>summary');await click('#recent-missions button:first-child');
+  await waitUntil(browser,()=>document.querySelector('#chat-status').textContent!=='Ready for a chat'&&!document.querySelector('#chat-history').open,'existing chat selection');
+  await type('#mission-input','Separate follow-up draft.');await browser.call('browser_navigate',{url:base+'/chat'});await waitReady(browser);
+  assert.equal(await inspect(browser,()=>document.querySelector('#mission-input').value),'Separate follow-up draft.');
+  await newChat();await waitUntil(browser,()=>document.querySelector('#mission-input').value==='Unfinished new-chat draft for review.','new-chat draft restored');
+  await browser.call('browser_resize',{width:320,height:568});
+  const compact=await inspect(browser,()=>({width:document.documentElement.scrollWidth,viewport:innerWidth,bottom:document.querySelector('#mission-form').getBoundingClientRect().bottom,height:innerHeight}));
+  assert.ok(compact.width<=compact.viewport&&compact.bottom<=compact.height,JSON.stringify(compact));assert.deepEqual((await inspect(browser,auditTextContrast)).failures,[]);await shot('wrapup-draft-mobile');
+  await click('#discard-draft');assert.equal(await inspect(browser,()=>document.querySelector('#mission-input').value),'');assert.equal(await inspect(browser,()=>document.activeElement.id),'mission-input');
+  await browser.call('browser_resize',{width:1440,height:1000});
+});
+
+test('voice recordings measure synthetic microphone audio and replay with an advancing waveform playhead',async context=>{
+  if(process.env.COLLECTIVE101_TEST_AUDIO!=='1'){context.skip('Run with COLLECTIVE101_TEST_AUDIO=1 for an isolated synthetic microphone');return;}
+  await newChat();await click('#voice-input');
+  assert.equal(await inspect(browser,()=>document.querySelector('#voice-dialog').open),true);
+  if(await inspect(browser,()=>document.querySelector('#voice-transcribe').checked))await click('#voice-transcribe');
+  await click('#voice-start');
+  await waitUntil(browser,()=>document.querySelector('#voice-recording').dataset.state==='recording','synthetic audio recording');
+  await waitUntil(browser,()=>[...document.querySelectorAll('#voice-waveform>line:not(.voice-playhead)')].some(line=>Number(line.getAttribute('y1'))<20),'measured microphone levels');
+  assert.equal(await inspect(browser,()=>document.querySelector('#send-mission').disabled),true);
+  assert.deepEqual((await inspect(browser,auditTextContrast)).failures,[]);await shot('voice-live-waveform');
+  await click('#voice-record-stop');await waitUntil(browser,()=>!document.querySelector('#voice-review-controls').hidden,'saved local clip');
+  assert.equal(await inspect(browser,()=>document.querySelector('#voice-audio').src.startsWith('blob:')),true);
+  await click('#voice-replay');await waitUntil(browser,()=>document.querySelector('#voice-audio').currentTime>.1&&!document.querySelector('#voice-audio').paused,'decoded synthetic clip playback');
+  await waitUntil(browser,()=>document.querySelectorAll('#voice-waveform .heard').length>0,'audio playback progress');
+  await shot('voice-playback-waveform');await click('#voice-replay');
+  assert.equal(await inspect(browser,()=>document.querySelector('#voice-audio').paused),true);
+  await click('#voice-seek');await browser.call('browser_press_key',{key:'Home'});assert.equal(await inspect(browser,()=>document.querySelector('#voice-audio').currentTime),0);
+  for(const width of [320,768,1024,1440]){
+    await browser.call('browser_resize',{width,height:844});
+    const bounds=await inspect(browser,()=>({width:document.documentElement.scrollWidth,viewport:innerWidth,bottom:document.querySelector('#mission-form').getBoundingClientRect().bottom,height:innerHeight,panel:document.querySelector('#voice-recording').getBoundingClientRect().top,header:document.querySelector('.app-header').getBoundingClientRect().bottom,voiceWidth:document.querySelector('#voice-recording').getBoundingClientRect().width,voiceHeight:document.querySelector('#voice-recording').getBoundingClientRect().height}));
+    assert.ok(bounds.width<=bounds.viewport&&bounds.bottom<=bounds.height&&bounds.panel>=bounds.header,JSON.stringify(bounds));
+    assert.ok(bounds.voiceWidth<=420&&bounds.voiceHeight<=110,'Compact waveform panel: '+JSON.stringify(bounds));
+    if(width===320)await shot('voice-waveform-mobile');
+  }
+  await click('[data-nav="settings"]');await click('.theme-option:has(input[value="light"])');await click('[data-nav="chat"]');
+  assert.deepEqual((await inspect(browser,auditTextContrast)).failures,[]);await shot('voice-waveform-light');
+  await click('#voice-discard');assert.equal(await inspect(browser,()=>document.querySelector('#voice-recording').hidden),true);
+  assert.equal(await inspect(browser,()=>document.activeElement.id),'voice-input');
+  await click('[data-nav="settings"]');await click('#reset-preferences');await click('[data-nav="chat"]');await browser.call('browser_resize',{width:1440,height:1000});
+  const messages=resultText(await browser.call('browser_console_messages',{level:'warning',all:true}));assert.match(messages,/Errors: 0, Warnings: 0/);
+});
+
+test('local account signup profile signout and signin persist the real current identity',async()=>{
+  await browser.call('browser_resize',{width:1440,height:1000});await click('[data-nav="home"]');
+  await click('#account-menu-summary');await click('#account-menu [data-account-open="signup"]');
+  assert.equal(await inspect(browser,()=>document.activeElement.id),'signup-name');
+  assert.deepEqual((await inspect(browser,auditTextContrast)).failures,[]);await shot('account-signup');
+  await type('#signup-name','Fixture Operator');await type('#account-username','fixture-owner');await type('#account-password','fixture-browser-password-123');await click('#account-auth-submit');
+  await waitUntil(browser,()=>location.pathname==='/dashboard'&&document.documentElement.dataset.ready==='true'&&document.querySelector('#account-avatar').textContent==='FO','signed-in owner');
+  await click('#account-menu-summary');assert.match(await inspect(browser,()=>document.querySelector('#account-identity').textContent),/fixture-owner/);await shot('account-current-user');
+  await click('#account-manage');assert.equal(await inspect(browser,()=>document.activeElement.id),'account-settings');
+  await type('#profile-name','Fixture Reviewer');await click('#profile-save');
+  await waitUntil(browser,()=>document.querySelector('#account-avatar').textContent==='FR','saved profile');
+  assert.equal(await inspect(browser,()=>document.querySelector('#account-invites').hidden),false);await shot('account-profile');
+  await click('#account-settings [data-account-signout]');
+  await waitUntil(browser,()=>location.pathname==='/'&&document.documentElement.dataset.ready==='true'&&document.querySelector('#account-identity').textContent.includes('Guest'),'signed-out public Home');
+  assert.equal(await inspect(browser,()=>document.querySelectorAll('#chat-messages .message').length),0);
+  await click('[data-nav="chat"]');assert.equal(await inspect(browser,()=>document.querySelector('#account-dialog').open),true);
+  await type('#account-username','fixture-owner');await type('#account-password','fixture-browser-password-123');await click('#account-auth-submit');
+  await waitUntil(browser,()=>location.pathname==='/dashboard'&&document.documentElement.dataset.ready==='true'&&document.querySelector('#account-avatar').textContent==='FR','persisted account signs in again');
+  await click('#account-menu-summary');await browser.call('browser_press_key',{key:'Escape'});
+  assert.equal(await inspect(browser,()=>document.activeElement.id),'account-menu-summary');
+  const messages=resultText(await browser.call('browser_console_messages',{level:'warning',all:true}));assert.match(messages,/Errors: 0, Warnings: 0/);
 });

@@ -5,7 +5,7 @@ window.CollectivePreferences = (() => {
   const key = 'collective101.preferences.v1';
   const media = window.matchMedia?.('(prefers-color-scheme: dark)');
   const messages = {
-    'Overview':'Gambaran keseluruhan','Organization':'Organisasi','Mission chat':'Sembang misi',
+    'Home':'Laman utama','Overview':'Gambaran keseluruhan','Organization':'Organisasi','Mission chat':'Sembang misi',
     'Connectors':'Penyambung','Activity & evidence':'Aktiviti & bukti','Settings':'Tetapan',
     'Workspace':'Ruang kerja','YOUR WORKSPACE':'RUANG KERJA ANDA','RECENT MISSIONS':'MISI TERKINI',
     'Your missions will appear here.':'Misi anda akan dipaparkan di sini.',
@@ -86,7 +86,7 @@ window.CollectivePreferences = (() => {
     'Live model · Head of Distribution receives your message first.':'Model langsung · Ketua Pengagihan menerima mesej anda dahulu.',
   };
   messages.Dashboard=messages.Overview;messages.Chat=messages['Mission chat'];messages.Effectiveness='Keberkesanan';
-  const catalogs={en:{},ms:messages,...window.CollectiveLocales.messages};
+  const catalogs={en:{},...window.CollectiveLocales.messages,ms:{...messages,...window.CollectiveLocales.messages.ms}};
   const knownLabels=new Set(Object.values(catalogs).flatMap(catalog=>Object.keys(catalog)));
   let saved = {...defaults}, persistent = true;
   try { saved = {...defaults,...JSON.parse(localStorage.getItem(key)||'{}')}; } catch { persistent = false; }
@@ -153,5 +153,5 @@ window.CollectivePreferences = (() => {
     if(event.key!==key)return;
     try{saved=normalize({...defaults,...JSON.parse(event.newValue||'{}')});update({},false);}catch{/* Ignore malformed preferences from another tab. */}
   });
-  return {t,get:()=>({...saved})};
+  return {t,get:()=>({...saved}),persistent:()=>persistent};
 })();

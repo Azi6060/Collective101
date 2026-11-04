@@ -1,19 +1,12 @@
 'use strict';
 // Presentation of saved state only. No model calls, simulated metrics or permission changes.
 window.CollectiveDashboard = (() => {
-  let callbacks=null,signature='',rosterSignature='',emptyState=[];
+  let callbacks=null,rosterSignature='';
   const $=id=>document.getElementById(id);
-  const t=text=>window.CollectivePreferences?.t(text)||text;
   const el=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;};
-  const needsInput=new Set(['clarifying','needs_input','needs_approval','paused','interrupted']);
-  const statuses={intake:'Considering',running:'In progress',clarifying:'Your guidance',needs_input:'Your guidance',needs_approval:'Your approval',paused:'Paused',interrupted:'Resume when ready',reviewed:'Reviewed',answered:'Answered',blocked:'Needs attention',error:'Needs attention'};
-  function savedDate(value) {
-    const date=new Date(value);return Number.isNaN(date.getTime())?t('Saved chat'):new Intl.DateTimeFormat(document.documentElement.lang,{month:'short',day:'numeric'}).format(date);
-  }
   function init(handlers) {
     callbacks=handlers;
     initAmbientMotion();
-    emptyState=[...$('mission-list').childNodes];
     $('dashboard-mission').addEventListener('submit',event=>{
       event.preventDefault();const draft=$('dashboard-input').value.trim();if(!draft)return;
       callbacks.newMission();$('mission-input').value=draft;callbacks.growComposer();$('mission-input').focus();
@@ -30,21 +23,20 @@ window.CollectiveDashboard = (() => {
     reduced?.addEventListener?.('change',update);
     window.addEventListener('collective-preferences-change',update);
     document.addEventListener('visibilitychange',update);
-    if(window.IntersectionObserver){const observer=new IntersectionObserver(entries=>entries.forEach(entry=>entry.target.classList.toggle('motion-offscreen',!entry.isIntersecting)));observer.observe(document.querySelector('.dashboard-hero'));}
+    if(window.IntersectionObserver){const observer=new IntersectionObserver(entries=>entries.forEach(entry=>entry.target.classList.toggle('motion-offscreen',!entry.isIntersecting)));document.querySelectorAll('.home-hero,.dashboard-launch-card').forEach(node=>observer.observe(node));}
     update();
   }
   function drawRoster(roster) {
     if(!roster||JSON.stringify(roster.departments)===rosterSignature)return;
     rosterSignature=JSON.stringify(roster.departments);
-    $('dashboard-agent-count').textContent=String(roster.agents.length);
-    $('dashboard-department-count').textContent=String(roster.departments.length);
+    $('home-departments').replaceChildren(...roster.departments.map(department=>el('li','',department.name)));
     const svg=$('constellation'),ns='http://www.w3.org/2000/svg';svg.replaceChildren();
     function shape(tag,attributes,text,parent=svg){const node=document.createElementNS(ns,tag);for(const [name,value] of Object.entries(attributes))node.setAttribute(name,String(value));if(text!==undefined)node.textContent=text;parent.append(node);return node;}
     shape('ellipse',{cx:220,cy:185,rx:163,ry:70,transform:'rotate(-28 220 185)',class:'constellation-orbit'});
     shape('ellipse',{cx:220,cy:185,rx:163,ry:70,transform:'rotate(28 220 185)',class:'constellation-orbit'});
     shape('circle',{cx:220,cy:185,r:126,class:'constellation-orbit','stroke-dasharray':'2 7'});
     // Decorative introduction, never a signal that agents or missions are active.
-    // The whole sequence settles in under five seconds and has a static fallback.
+    // A short sweep introduces the continuing decorative orbits.
     const sweep=shape('g',{class:'constellation-sweep'});
     shape('circle',{cx:220,cy:185,r:147,class:'constellation-sweep-track','stroke-dasharray':'85 840'},undefined,sweep);
     shape('circle',{cx:367,cy:185,r:3,class:'constellation-spark'},undefined,sweep);
@@ -77,41 +69,6 @@ window.CollectiveDashboard = (() => {
   }
   function render(state) {
     drawRoster(state.roster);
-    const chats=state.chats||[],key=JSON.stringify([chats,document.documentElement.lang]);if(signature===key)return;signature=key;
-    $('view-overview').classList.toggle('has-missions',chats.length>0);
-    const waiting=chats.filter(chat=>needsInput.has(chat.status));
-    $('metric-active').textContent=String(chats.filter(chat=>['running','intake'].includes(chat.status)).length);
-    $('metric-attention').textContent=String(waiting.length);
-    $('metric-reviewed').textContent=String(chats.filter(chat=>chat.status==='reviewed').length);
-    $('metric-chats').textContent=String(chats.length);
-    $('metric-runs').textContent=chats.length?t('In your recent history'):t('Your next idea starts here');
-    const list=$('mission-list');
-    const focusedChat=list.contains(document.activeElement)?document.activeElement.closest('[data-chat-id]')?.dataset.chatId:null;
-    if(chats.length) {
-      list.className='dashboard-mission-list';
-      list.replaceChildren(...chats.slice(0,5).map(chat=>{
-        const button=el('button','mission-list-item mission-card');button.type='button';
-        button.dataset.chatId=chat.id;
-        const top=el('span','mission-card-top'),kind=el('span','mission-card-kind');
-        if(window.CollectiveMissionUI)kind.append(window.CollectiveMissionUI.icon(chat.run_id?'strategy':'communications'));
-        kind.append(document.createTextNode(t(chat.run_id?'Mission':'Conversation')));
-        const copy=el('span','mission-row-copy');copy.append(el('strong','',chat.title||t('Saved chat')));
-        copy.firstChild.dir='auto';
-        const status=el('span','state-pill '+chat.status,t(statuses[chat.status]||chat.status.replaceAll('_',' ')));
-        top.append(kind,status);
-        const actions={reviewed:'View result',clarifying:'Answer questions',needs_input:'Answer questions',needs_approval:'Review request',paused:'Continue',interrupted:'Continue',running:'Follow progress',intake:'Follow progress',blocked:'Review details',error:'Review details'};
-        const footer=el('span','mission-card-footer'),next=el('span','mission-card-action',t(actions[chat.status]||'Open conversation'));
-        const arrow=el('span','mission-row-arrow','↗');arrow.setAttribute('aria-hidden','true');
-        next.append(arrow);footer.append(el('span','mission-card-date',savedDate(chat.created_at)),next);
-        button.append(top,copy,footer);button.addEventListener('click',()=>callbacks.selectChat(chat.id));return button;
-      }));
-    }else{list.className='dashboard-empty';list.replaceChildren(...emptyState);}
-    if(focusedChat)[...list.querySelectorAll('[data-chat-id]')].find(node=>node.dataset.chatId===focusedChat)?.focus({preventScroll:true});
-    const attention=$('dashboard-attention');
-    if(waiting.length)attention.replaceChildren(...waiting.slice(0,3).map(chat=>{
-      const button=el('button','attention-item');button.type='button';button.append(el('span','',chat.title||t('Saved chat')),el('small','',t(statuses[chat.status])));button.addEventListener('click',()=>callbacks.selectChat(chat.id));return button;
-    }));
-    else attention.replaceChildren(el('p','dashboard-caught-up',t('You’re all caught up.')),el('p','text-secondary small',t('Missions waiting for your guidance will appear here.')));
   }
   return {init,render};
 })();

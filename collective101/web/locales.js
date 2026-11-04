@@ -259,5 +259,7 @@ window.CollectiveLocales = (() => {
   }
   const evaluationNames={zh:'效能评估',es:'Eficacia',hi:'प्रभावशीलता',ar:'الفاعلية',fr:'Efficacité',pt:'Eficácia',ru:'Эффективность',bn:'কার্যকারিতা',de:'Wirksamkeit',ja:'有効性',ko:'효과성',id:'Efektivitas'};
   for(const [code,catalog] of Object.entries(messages)) {catalog.Dashboard=catalog.Overview;catalog.Chat=catalog['Mission chat'];catalog.Effectiveness=evaluationNames[code];}
+  const homeNames={zh:'首页',es:'Inicio',hi:'होम',ar:'الرئيسية',fr:'Accueil',pt:'Início',ru:'Главная',bn:'হোম',de:'Startseite',ja:'ホーム',ko:'홈',id:'Beranda'};
+  for(const [code,label] of Object.entries(homeNames))messages[code].Home=label;
   return {names,messages};
 })();

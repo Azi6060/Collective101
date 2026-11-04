@@ -16,32 +16,19 @@
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
 <div class="app-shell">
-<aside class="sidebar" aria-label="Primary navigation">
-  <button id="toggle-sidebar" class="nav-toggle" type="button" aria-label="Collapse navigation" aria-expanded="true" title="Collapse navigation">
-    <svg class="toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <rect width="18" height="18" x="3" y="3" rx="2"/>
-      <path d="M9 3v18"/>
-      <path d="m14 9-3 3 3 3"/>
-    </svg>
-  </button>
-  <a href="/" class="brand" data-goto="overview">
+<div class="main-shell">
+<header class="topbar app-header">
+  <a href="/" class="brand" data-goto="home" aria-label="Collective101 home">
     <span class="brand-mark" aria-hidden="true">
       <svg class="collective-emblem" viewBox="0 0 48 48" fill="none" stroke="currentColor" aria-hidden="true"><g class="emblem-orbits" stroke-width="1.1"><ellipse cx="24" cy="24" rx="19" ry="8" transform="rotate(-35 24 24)"/><ellipse cx="24" cy="24" rx="19" ry="8" transform="rotate(35 24 24)"/><circle cx="24" cy="24" r="15" stroke-dasharray="1 6"/></g><circle cx="24" cy="24" r="4" fill="currentColor" stroke="none"/><g fill="currentColor" stroke="none"><circle cx="24" cy="5" r="1.8"/><circle cx="35" cy="9" r="1.8"/><circle cx="42" cy="18" r="1.8"/><circle cx="42" cy="30" r="1.8"/><circle cx="35" cy="39" r="1.8"/><circle cx="24" cy="43" r="1.8"/><circle cx="13" cy="39" r="1.8"/><circle cx="6" cy="30" r="1.8"/><circle cx="6" cy="18" r="1.8"/><circle cx="13" cy="9" r="1.8"/></g></svg>
     </span>
     <span class="brand-text">
-      <span class="brand-title">Collective</span>
-      <span class="brand-sub">AN ORGANIZATION THAT THINKS</span>
+      <span class="brand-title" aria-hidden="true"><span>C</span><span>o</span><span>l</span><span>l</span><span>e</span><span>c</span><span>t</span><span>i</span><span>v</span><span>e</span></span><span class="brand-101" aria-hidden="true"><i>1</i><i>0</i><i>1</i></span>
     </span>
   </a>
-  <div class="workspace-label"><span>WORKSPACE</span><span class="workspace-dot" aria-hidden="true"></span></div>
-  <button id="new-chat" class="new-mission nav-new-chat" type="button" aria-label="New chat" title="New chat">
-    <span class="nav-icon" aria-hidden="true">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-    </span>
-    <span class="nav-label">New chat</span>
-  </button>
-  <nav class="nav flex-column gap-1">
-    <a href="/" data-nav="overview" class="nav-link active">
+  <nav class="primary-nav" aria-label="Primary navigation">
+    <a href="/" data-nav="home" class="nav-link active"><span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></svg></span>Home</a>
+    <a href="/dashboard" data-nav="overview" class="nav-link">
       <span class="nav-icon" aria-hidden="true">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
       </span>
@@ -59,12 +46,6 @@
       </span>
       Chat
     </a>
-    <a href="/connectors" data-nav="connectors" class="nav-link">
-      <span class="nav-icon" aria-hidden="true">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="8" x="5" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 10v4"/><path d="M18 10v4"/></svg>
-      </span>
-      Connectors
-    </a>
     <a href="/evaluations" data-nav="evaluations" class="nav-link"><span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16M7 16V9m5 7V4m5 12v-5"/></svg></span>Effectiveness</a>
     <a href="/activity" data-nav="activity" class="nav-link">
       <span class="nav-icon" aria-hidden="true">
@@ -72,50 +53,43 @@
       </span>
       Activity &amp; evidence
     </a>
-    <a href="/settings" data-nav="settings" class="nav-link settings-link"><span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m9 3-1 3-3 1-2 5 2 5 3 1 1 3h6l1-3 3-1 2-5-2-5-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></svg></span>Settings</a>
   </nav>
-  <div class="sidebar-rule"></div>
-  <div class="workspace-label"><span>RECENT CHATS</span></div>
-  <div id="recent-missions" class="recent-missions"><p class="muted-sidebar">No chats started yet</p></div>
-  <div class="sidebar-bottom">
-    <div class="version-badge"><span class="version-label">COLLECTIVE 101</span></div>
+  <div class="header-actions">
+  <button id="new-chat" class="new-mission header-new-chat" type="button" aria-label="New chat" title="New chat">
+    <span class="nav-icon" aria-hidden="true">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </span>
+    <span class="nav-label">New chat</span>
+  </button>
+    <details id="chat-history" class="header-history">
+      <summary aria-label="Recent chats"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7"/><path d="M12 7v5l3 2"/></svg><span class="header-action-label">Recent chats</span></summary>
+      <div class="history-panel"><h2>Recent chats</h2><label for="history-search" class="visually-hidden">Search chats and files</label><input id="history-search" type="search" class="form-control history-search" placeholder="Search chats and files" maxlength="100" autocomplete="off"><p id="history-search-status" class="history-search-status" role="status" aria-live="polite"></p><div id="recent-missions" class="recent-missions"><p class="muted-sidebar">No chats started yet</p></div></div>
+    </details>
+    <a class="header-settings" href="/settings" data-nav="settings" aria-label="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m9 3-1 3-3 1-2 5 2 5 3 1 1 3h6l1-3 3-1 2-5-2-5-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></svg></a>
+    <details id="account-menu" class="account-menu"><summary id="account-menu-summary" aria-label="Account: Guest" title="Account"><span id="account-avatar" class="account-avatar" aria-hidden="true"></span><span id="account-menu-name" class="visually-hidden">Account</span></summary><div class="account-menu-panel"><strong id="account-name">Welcome to your workspace</strong><p id="account-identity">Guest</p><div id="account-menu-guest"><button type="button" data-account-open="signin" disabled>Sign in</button><button type="button" data-account-open="signup" disabled>Create account</button></div><div id="account-menu-member" hidden><button id="account-manage" type="button">Manage account</button><button type="button" data-account-signout>Sign out</button></div></div></details>
   </div>
-</aside>
-
-<div class="main-shell">
-<header class="topbar">
-  <div class="breadcrumb-label">Workspace <span>/</span> <strong id="breadcrumb">Dashboard</strong></div>
-  <div class="header-status">
-    <span class="status-dot" aria-hidden="true"></span>
-    <span id="connection-status">Connecting</span>
-    <a class="header-settings" href="/settings" data-goto="settings" aria-label="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m9 3-1 3-3 1-2 5 2 5 3 1 1 3h6l1-3 3-1 2-5-2-5-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></svg></a>
-  </div>
+  <span id="breadcrumb" class="visually-hidden">Dashboard</span>
 </header>
 
 <main id="main" tabindex="-1">
-<div id="notice" role="alert" class="alert alert-danger d-none"></div>
+<div id="notice" role="alert" class="alert alert-danger d-none"><span id="notice-message"></span><button id="dismiss-notice" type="button" aria-label="Dismiss message" title="Dismiss message">&#215;</button></div>
+<p id="connection-alert" class="connection-alert" role="status" hidden>Connection interrupted</p>
+<div id="workspace-toast" class="workspace-toast" role="status" aria-live="polite" hidden><span id="workspace-toast-message"></span><button id="dismiss-toast" type="button" aria-label="Dismiss message">&#215;</button></div>
 
-<section id="view-overview" class="view dashboard-view">
-  <div class="dashboard-heading"><div><p class="eyebrow">YOUR COLLECTIVE WORKSPACE</p><h1>The bigger picture.</h1></div><div class="dashboard-heading-note"><span class="status-dot" aria-hidden="true"></span><span>Clarity in the work. Evidence in the result.</span></div></div>
-  <div class="dashboard-hero">
-    <div class="dashboard-hero-copy"><span class="section-kicker"><span aria-hidden="true">01 /</span> A SPACE FOR WHAT’S NEXT</span><h2>Big thinking.<br><em>Beautifully coordinated.</em></h2><p>Bring your next idea to the right minds. Follow the work, shape the direction, and see the result.</p>
-      <form id="dashboard-mission" class="dashboard-launcher"><label class="visually-hidden" for="dashboard-input">Describe your next mission</label><textarea id="dashboard-input" name="mission-draft" rows="2" maxlength="12000" placeholder="What would you like to accomplish?" required></textarea><div><span>Every mission starts with you.</span><button class="btn btn-primary" type="submit">Open in Chat <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div></form>
-      <div class="dashboard-starters"><span>Try a starting point</span><button class="starter" data-example="website" type="button">Build a website</button><button class="starter" data-example="research" type="button">Explore a decision</button><button class="starter" data-example="calculator" type="button">Test JavaScript</button></div>
-    </div>
-    <button id="organization-map" class="organization-map" type="button" aria-label="Explore the organization and its 101 registered identities"><span class="map-label">ORGANIZATION MAP · DECORATIVE MOTION</span><svg id="constellation" viewBox="0 0 440 370" aria-hidden="true"></svg><span class="map-caption"><span><strong id="dashboard-agent-count">101</strong> identities. <strong id="dashboard-department-count">10</strong> departments.</span><span class="map-explore">Explore the organization <span aria-hidden="true">↗</span></span></span></button>
+<section id="view-home" class="view home-view" aria-labelledby="home-title">
+  <div class="home-hero">
+    <div class="home-intro"><p class="home-eyebrow"><span aria-hidden="true"></span>WELCOME TO COLLECTIVE101</p><h1 id="home-title">Big ideas.<br><em>Better together.</em></h1><p class="home-lead">A place for your next idea, and the minds to move it forward.</p><p class="home-description">Bring research, design, engineering and verification together around your goals. Collective101 coordinates an AI organization so you can shape the work, follow its progress and review what it creates.</p><div class="home-actions"><a id="home-enter" href="/dashboard" data-goto="overview" class="btn btn-primary">Enter your workspace <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a><a href="#home-about" class="home-about-link">Meet the collective <span aria-hidden="true">&#8595;</span></a></div></div>
+    <div class="home-visual"><div class="home-orbit-label" aria-hidden="true"><span>DEFINED ROLES</span><span>SHARED DIRECTION</span></div><button id="organization-map" class="organization-map" type="button" aria-label="Explore the organization and its 101 registered identities"><svg id="constellation" viewBox="0 0 440 370" aria-hidden="true"></svg></button><p class="home-visual-note">101 registered identities. One connected organization.</p></div>
   </div>
-  <div class="dashboard-metrics" aria-label="Your recent workspace activity">
-    <div class="dashboard-metric"><span class="metric-index" aria-hidden="true">01</span><span>In progress</span><strong id="metric-active">0</strong><small>Currently being worked on</small></div>
-    <div class="dashboard-metric"><span class="metric-index" aria-hidden="true">02</span><span>Needs your input</span><strong id="metric-attention">0</strong><small>Decisions that move work forward</small></div>
-    <div class="dashboard-metric"><span class="metric-index" aria-hidden="true">03</span><span>Reviewed results</span><strong id="metric-reviewed">0</strong><small>In your recent mission history</small></div>
-    <div class="dashboard-metric"><span class="metric-index" aria-hidden="true">04</span><span>Recent conversations</span><strong id="metric-chats">0</strong><small id="metric-runs">Your next idea starts here</small></div>
-  </div>
-  <div class="dashboard-bottom"><section class="panel dashboard-recent"><div class="section-heading"><div><p class="section-kicker">PICK UP WHERE YOU LEFT OFF</p><h2>Your recent work</h2></div><button class="btn btn-outline-secondary new-mission" type="button">New mission <span aria-hidden="true">↗</span></button></div><div id="mission-list" class="dashboard-empty"><span class="empty-orbit" aria-hidden="true"></span><h3>Your next chapter is unwritten.</h3><p>Start a conversation. Your missions and results will have a home here.</p><button id="start-chat" class="btn btn-primary" type="button">Start your first mission</button></div></section>
-    <div class="dashboard-side"><section class="panel dashboard-attention"><div class="section-heading"><h2>Over to you</h2><span class="attention-symbol" aria-hidden="true">↗</span></div><div id="dashboard-attention"><p class="dashboard-caught-up">You’re all caught up.</p><p class="text-secondary small">Missions waiting for your guidance will appear here.</p></div></section>
-    <section class="panel dashboard-readiness"><p class="section-kicker">WORKSPACE READINESS</p><h2 id="model-status">Checking model configuration</h2><p id="model-description" class="readiness-description">Provider availability is checked locally.</p><a href="/connectors" data-goto="connectors" class="readiness-link">Manage connections <span aria-hidden="true">↗</span></a><div class="readiness-check"><span>JavaScript checks</span><span id="metric-sandbox">Checking</span></div><a href="/evaluations" data-goto="evaluations" class="evidence-link">Explore agent evidence <span aria-hidden="true">↗</span></a></section></div>
-  </div>
+  <section id="home-about" class="home-about" aria-labelledby="home-about-title"><div><p class="section-kicker">ABOUT THE PROJECT</p><h2 id="home-about-title">More than a single conversation.<br>A team with a clear structure.</h2><p>Collective101 organizes AI roles into ten departments. Department heads coordinate their teams, and a Mission Director brings the contributions together. Each goal uses the departments it needs.</p><a href="/organization" data-goto="organization" class="home-text-link">Explore the organization <span aria-hidden="true">&#8599;</span></a></div><div class="home-structure"><dl><div><dt>Registered identities</dt><dd>101</dd></div><div><dt>Departments</dt><dd>10</dd></div><div><dt>Mission Director</dt><dd>1</dd></div></dl><p>Different responsibilities. Clear reporting lines.</p><ul id="home-departments" class="home-departments" aria-label="Departments"></ul></div></section>
+  <section class="home-workflow" aria-labelledby="home-workflow-title"><div class="home-section-heading"><p class="section-kicker">HOW IT COMES TOGETHER</p><h2 id="home-workflow-title">Your idea sets the direction.</h2></div><ol class="home-steps"><li><span class="home-step-number" aria-hidden="true">01</span><h3>Tell us what you need</h3><p>Ask a question or describe an outcome. The Head of Distribution helps clarify the request and route the work.</p></li><li><span class="home-step-number" aria-hidden="true">02</span><h3>The right teams join</h3><p>Relevant departments contribute within the mission's permissions, using the tools you have enabled.</p></li><li><span class="home-step-number" aria-hidden="true">03</span><h3>Review it together</h3><p>See saved files, recorded activity and review evidence. Give guidance whenever the team needs your input.</p></li></ol></section>
+  <section id="home-get-started" class="home-get-started" aria-labelledby="home-ready-title"><div><h2 id="home-ready-title">Make room for your next idea.</h2><p>Connect a live model in Settings to receive replies. Enable the tools your work needs, then take it one conversation at a time.</p></div><a href="/dashboard" data-goto="overview" class="btn btn-primary">Let's get started <span aria-hidden="true">&#8599;</span></a></section>
 </section>
 
+<section id="view-overview" class="view dashboard-view d-none" aria-labelledby="dashboard-title">
+  <div class="dashboard-heading"><h1 id="dashboard-title">Dashboard</h1></div>
+  <section class="dashboard-launch-card" aria-labelledby="dashboard-launch-title"><div class="dashboard-ambient" aria-hidden="true"><i></i><i></i><b></b></div><div class="dashboard-welcome"><span class="dashboard-welcome-mark" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 2 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/></svg></span><p>Welcome back.</p><h2 id="dashboard-launch-title">What would you like<br>to work on today?</h2><p class="dashboard-invitation">Share an idea, ask a question, or tell us what you need. We'll take it from there, together.</p></div><form id="dashboard-mission" class="dashboard-launcher" aria-labelledby="dashboard-launch-title"><label class="visually-hidden" for="dashboard-input">Describe your next mission</label><textarea id="dashboard-input" name="mission-draft" rows="7" maxlength="12000" placeholder="Tell us what's on your mind..." aria-describedby="dashboard-draft-help" required></textarea><div><p id="dashboard-draft-help">You can review your message in Chat before sending.</p><button class="btn btn-primary" type="submit">Continue in Chat <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div></form></section>
+</section>
 
 <section id="view-organization" class="view d-none">
   <div class="page-heading compact">
@@ -144,7 +118,7 @@
     </label>
     <span id="directory-count" class="text-secondary">10 departments</span>
   </div>
-  <div class="organization-view-controls" role="group" aria-label="Organization view"><button class="btn btn-outline-secondary" type="button" data-organization-mode="map" aria-pressed="true">Explore the map</button><button class="btn btn-outline-secondary" type="button" data-organization-mode="directory" aria-pressed="false">Department directory</button><span>Real roles. Clear reporting lines.</span></div>
+  <div class="organization-view-controls" role="group" aria-label="Organization view"><button class="btn btn-outline-secondary" type="button" data-organization-mode="map" aria-pressed="true">Explore the map</button><button class="btn btn-outline-secondary" type="button" data-organization-mode="directory" aria-pressed="false">Department directory</button></div>
   <section id="organization-explorer" class="organization-explorer" aria-label="Organization reporting map" hidden><div class="organization-map-stage"><p class="section-kicker">ONE ORGANIZATION · MANY PERSPECTIVES</p><div id="organization-network" class="organization-network"></div><p class="organization-map-caption">1 director · 10 department heads · 90 employees<br>Select a department to meet its team.</p></div><aside id="organization-details" class="organization-details" aria-label="Selected department"></aside></section>
   <div id="department-grid" class="department-grid"></div>
   <div id="search-results" class="panel d-none"></div>
@@ -175,10 +149,14 @@
       </summary>
       <div class="workspace-content">
         <div class="workspace-heading">
+          <span class="workspace-overline">MISSION WORKSPACE</span>
           <strong id="workspace-title">New chat</strong>
+          <button id="rename-chat" type="button" class="workspace-action" aria-label="Rename chat" title="Rename chat" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m16 3 5 5L8 21H3v-5L16 3Zm-2 2 5 5"/></svg></button>
           <span id="workspace-state"></span>
         </div>
-        <div class="workspace-section">
+        <div class="workspace-tabs" role="tablist" aria-label="Mission workspace"><button id="workspace-tab-files" type="button" role="tab" aria-selected="true" aria-controls="workspace-panel-files" data-workspace-tab="files">Files <span id="workspace-file-count">0</span></button><button id="workspace-tab-references" type="button" role="tab" aria-selected="false" aria-controls="workspace-panel-references" tabindex="-1" data-workspace-tab="references">Uploads <span id="workspace-reference-count">0</span></button><button id="workspace-tab-activity" type="button" role="tab" aria-selected="false" aria-controls="workspace-panel-activity" tabindex="-1" data-workspace-tab="activity">Activity</button></div>
+        <label for="workspace-file-search" class="visually-hidden">Filter files</label><input id="workspace-file-search" type="search" class="form-control workspace-file-search" placeholder="Filter files" maxlength="100" autocomplete="off">
+        <div id="workspace-panel-files" class="workspace-section" role="tabpanel" aria-labelledby="workspace-tab-files">
           <div class="workspace-section-heading">
             <h2>Files</h2>
             <div class="workspace-actions">
@@ -191,7 +169,8 @@
           <a id="preview-link" class="workspace-action d-none" target="_blank" rel="noopener noreferrer">Open website preview ↗</a>
           <div id="workspace-files"></div>
         </div>
-        <div class="workspace-section">
+        <div id="workspace-panel-references" class="workspace-section" role="tabpanel" aria-labelledby="workspace-tab-references" hidden><h2>Your reference files</h2><p class="workspace-muted">Text excerpts can inform the mission. Images, videos and PDFs remain reference-only with the current text model.</p><div id="workspace-references"></div></div>
+        <div id="workspace-panel-activity" class="workspace-section" role="tabpanel" aria-labelledby="workspace-tab-activity" hidden>
           <h2>Activity</h2>
           <div id="workspace-events" class="workspace-muted">No actions yet.</div>
         </div>
@@ -231,19 +210,36 @@
         <time id="chat-progress-time" aria-live="off"></time>
       </div>
       <form id="mission-form" class="composer">
+        <div id="draft-recovery" class="draft-recovery" role="status" hidden><span id="draft-recovery-message">Draft restored.</span><button id="retry-draft-recovery" type="button" hidden>Retry</button><button id="discard-draft" type="button">Discard draft</button></div>
+        <section id="voice-recording" class="voice-recording" aria-labelledby="voice-recording-state" hidden>
+          <div class="voice-recording-heading"><span class="voice-recording-mark" aria-hidden="true"></span><strong id="voice-recording-state" role="status">Voice clip</strong><time id="voice-elapsed" aria-live="off">0:00 / 2:00</time><button id="voice-record-stop" type="button" class="voice-small-button voice-icon-button" aria-label="Stop recording" title="Stop recording"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button></div>
+          <svg id="voice-waveform" class="voice-waveform" viewBox="0 0 320 48" preserveAspectRatio="none" aria-hidden="true"><line id="voice-playhead" class="voice-playhead" x1="2" x2="2" y1="2" y2="46"/></svg>
+          <div id="voice-review-controls" class="voice-review-controls" hidden><button id="voice-replay" class="voice-small-button voice-icon-button" type="button" aria-label="Play recording" title="Play recording"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path class="voice-play-icon" d="m8 5 11 7-11 7V5Z"/><path class="voice-pause-icon" d="M6 5h4v14H6Zm8 0h4v14h-4Z"/></svg></button><label class="visually-hidden" for="voice-seek">Seek through your voice recording</label><input id="voice-seek" type="range" min="0" max="120" step="0.05" value="0"><button id="voice-discard" class="voice-small-button voice-icon-button" type="button" aria-label="Delete recording" title="Delete recording"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7"/></svg></button></div>
+          <p class="visually-hidden">Only in this tab. Send shares your transcript, not the audio.</p><audio id="voice-audio" preload="metadata" hidden></audio>
+        </section>
+        <div id="composer-attachments" class="composer-attachments" role="list" aria-label="Attached files" hidden></div>
+        <div id="upload-queue" class="upload-queue" role="list" aria-label="File uploads" hidden></div>
         <label for="mission-input" class="visually-hidden">Message your organization</label>
         <textarea id="mission-input" class="form-control" rows="1" maxlength="12000" placeholder="Message your organization..." required></textarea>
         <div class="composer-actions">
+          <div class="composer-tools"><button id="attach-files" type="button" class="composer-tool" aria-label="Attach files or videos" title="Attach files or videos" disabled><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m8 13 7-7a3 3 0 0 1 4 4L9 20a5 5 0 0 1-7-7L13 2m-6 13 8-8"/></svg></button><button id="voice-input" type="button" class="composer-tool" aria-label="Start voice input" aria-pressed="false" title="Voice input" disabled><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg></button><button id="voice-playback" type="button" class="composer-tool" aria-label="Read replies aloud" aria-pressed="false" title="Read replies aloud" disabled><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5V4Zm4 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg></button><button id="stop-speaking" type="button" class="composer-tool" aria-label="Stop reading aloud" title="Stop reading aloud" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button></div>
           <span class="composer-hint">Enter to send · Shift + Enter for a new line</span>
-          <button id="send-mission" class="btn btn-primary" type="submit" aria-label="Send message">
+          <button id="send-mission" class="btn btn-primary" type="submit" aria-label="Send message" disabled>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
           </button>
         </div>
+        <input id="chat-files" type="file" multiple hidden accept=".txt,.md,.csv,.json,.html,.css,.js,.mjs,.py,.yaml,.yml,.xml,.log,.sql,.ts,.tsx,.jsx,.srt,.vtt,.docx,.pdf,.png,.jpg,.jpeg,.webp,.mp4,.mov,.webm">
+        <p id="chat-input-status" class="chat-input-status" role="status" aria-live="polite" hidden></p>
         <small id="mode-description" class="visually-hidden"></small>
       </form>
     </div>
   </div>
 </section>
+
+<dialog id="voice-dialog" class="input-dialog" aria-labelledby="voice-dialog-title"><h2 id="voice-dialog-title">Let’s hear your idea.</h2><p id="voice-recording-copy">Record up to two minutes, watch your voice waveform and listen back. Audio stays in this tab and is cleared when you send, switch chats or reload.</p><label class="voice-transcribe-option"><input id="voice-transcribe" type="checkbox" checked> Also turn speech into text</label><p id="voice-transcribe-note">Optional transcription uses your browser’s speech service, which may process audio remotely. Review your transcript before sending; nothing sends automatically.</p><div class="dialog-actions"><button id="voice-cancel" class="btn btn-outline-secondary" type="button">Cancel</button><button id="voice-start" class="btn btn-primary" type="button">Start voice input</button></div></dialog>
+<dialog id="rename-dialog" class="input-dialog" aria-labelledby="rename-heading"><h2 id="rename-heading">Rename chat</h2><form id="rename-form"><label for="rename-title">Chat name</label><input id="rename-title" class="form-control" required maxlength="80" autocomplete="off"><p id="rename-status" class="form-status" role="status"></p><div class="dialog-actions"><button id="rename-cancel" type="button" class="btn btn-outline-secondary">Cancel</button><button id="rename-save" class="btn btn-primary" type="submit">Save name</button></div></form></dialog>
+<dialog id="attachment-viewer" class="input-dialog attachment-dialog" aria-labelledby="attachment-viewer-title"><div class="section-heading"><h2 id="attachment-viewer-title">Attachment</h2><button id="close-attachment" class="btn btn-outline-secondary" type="button">Close</button></div><div id="attachment-preview"></div></dialog>
+<dialog id="account-dialog" class="input-dialog account-dialog" aria-labelledby="account-title"><button id="close-account" type="button" class="dialog-close" aria-label="Close account dialog">×</button><p class="section-kicker">YOUR COLLECTIVE101 ACCOUNT</p><h2 id="account-title">Welcome back.</h2><p id="account-auth-copy">Sign in to your local Collective101 workspace.</p><div id="account-tabs" class="account-tabs" role="tablist" aria-label="Account access"><button id="account-tab-signin" type="button" role="tab" aria-selected="true" aria-controls="account-auth-form">Sign in</button><button id="account-tab-signup" type="button" role="tab" aria-selected="false" aria-controls="account-auth-form" tabindex="-1">Create account</button></div><form id="account-auth-form"><div id="signup-name-row" hidden><label for="signup-name">Display name</label><input id="signup-name" class="form-control" maxlength="60" autocomplete="name"></div><label for="account-username">Username</label><input id="account-username" class="form-control" required minlength="3" maxlength="32" autocomplete="username" autocapitalize="none" spellcheck="false"><label for="account-password">Password</label><input id="account-password" class="form-control" type="password" required minlength="12" maxlength="128" autocomplete="current-password"><p class="field-help">Use 12–128 characters. Usernames use letters, numbers, dots, underscores or hyphens.</p><div id="signup-invite-row" hidden><label for="signup-invite">Invitation code</label><input id="signup-invite" class="form-control" maxlength="100" autocomplete="off"></div><p id="account-auth-status" class="form-status" role="alert"></p><button id="account-auth-submit" type="submit" class="btn btn-primary">Sign in</button></form><p class="account-scope">Local accounts share this computer’s workspace, chats and connections.</p></dialog>
 
 <dialog id="file-viewer" class="file-viewer">
   <div class="file-viewer-heading">
@@ -261,6 +257,7 @@
 </dialog>
 
 <section id="view-connectors" class="view d-none">
+  <a href="/settings" data-goto="settings" class="settings-back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg>Settings</a>
   <div class="page-heading compact">
     <div>
       <div class="eyebrow">TOOLS &amp; CONNECTIONS</div>
@@ -364,8 +361,9 @@
 </section>
 
 <section id="view-settings" class="view d-none settings-view">
-  <div class="page-heading compact"><div><div class="eyebrow">MAKE IT YOURS</div><h1>Your workspace, your way.</h1><p class="lead-copy">A comfortable place to do your best work.</p></div><span class="settings-instant"><span class="status-dot" aria-hidden="true"></span><span>Changes apply instantly</span></span></div>
-  <div class="settings-layout"><div class="settings-sections">
+  <div class="page-heading compact"><div><div class="eyebrow">MAKE IT YOURS</div><h1>Your workspace, your way.</h1><p class="lead-copy">A comfortable place to do your best work.</p></div></div>
+  <div class="settings-layout settings-layout-single"><div class="settings-sections">
+    <section class="panel settings-panel settings-connectors" aria-labelledby="connections-title"><div class="settings-section-heading"><div><h2 id="connections-title">Connectors</h2><p>Manage model credentials and connected tools in Connectors.</p></div></div><div class="settings-model-state"><strong id="model-status">Checking model configuration</strong><p id="model-description">Provider availability is checked locally.</p><p>JavaScript checks: <span id="metric-sandbox">Checking</span></p></div><a id="settings-connectors" class="btn btn-outline-secondary" href="/connectors" data-nav="connectors">Open Connectors <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></section>
     <section class="panel settings-panel" aria-labelledby="appearance-title"><div class="settings-section-heading"><span class="settings-section-number" aria-hidden="true">01</span><div><h2 id="appearance-title">Appearance</h2><p>Choose the atmosphere for your workspace.</p></div></div>
       <fieldset class="theme-options"><legend class="visually-hidden">Appearance</legend>
         <label class="theme-option"><input type="radio" name="theme" value="light"><span class="theme-thumbnail light-thumbnail" aria-hidden="true"><span></span><i><b></b><b></b><b></b></i></span><span>Light</span><span class="theme-check" aria-hidden="true">✓</span></label>
@@ -378,11 +376,12 @@
       <div class="preference-row"><label for="setting-text-size">Text size</label><select id="setting-text-size" name="text-size" class="form-select"><option value="default">Default</option><option value="large">Larger</option></select></div>
     </section>
     <section class="panel settings-panel" aria-labelledby="accessibility-title"><div class="settings-section-heading"><span class="settings-section-number" aria-hidden="true">03</span><div><h2 id="accessibility-title">Accessibility</h2><p>Keep your workspace comfortable.</p></div></div><div class="preference-row"><div><label for="setting-reduce-motion">Reduce motion</label><p id="motion-help">Limit decorative animation. Your device’s reduced-motion preference is always respected.</p></div><input id="setting-reduce-motion" name="reduce-motion" class="preference-switch" type="checkbox" role="switch" aria-describedby="motion-help"></div></section>
+    <section id="account-settings" class="panel settings-panel account-settings" aria-labelledby="account-settings-title" tabindex="-1"><div class="settings-section-heading"><div><h2 id="account-settings-title">Your account</h2><p id="account-settings-copy">Local accounts belong to this shared workspace.</p></div></div><div id="account-settings-guest"><button type="button" class="btn btn-primary" data-account-open="signin" disabled>Sign in</button><button type="button" class="btn btn-outline-secondary" data-account-open="signup" disabled>Create account</button></div><div id="account-settings-member" hidden><div class="profile-identity"><strong id="profile-username"></strong><span id="profile-role"></span><button type="button" class="btn btn-outline-secondary" data-account-signout>Sign out</button></div><form id="profile-form" class="profile-form"><label for="profile-name">Display name</label><input id="profile-name" class="form-control" required maxlength="60" autocomplete="name"><button id="profile-save" type="submit" class="btn btn-outline-secondary">Save profile</button></form><details class="account-password-section"><summary>Change password</summary><form id="password-form" class="profile-form"><label for="current-password">Current password</label><input id="current-password" type="password" class="form-control" required minlength="12" maxlength="128" autocomplete="current-password"><label for="new-password">New password</label><input id="new-password" type="password" class="form-control" required minlength="12" maxlength="128" autocomplete="new-password"><button id="password-save" class="btn btn-outline-secondary" type="submit">Update password</button></form></details><div id="account-invites" class="account-invites" hidden><h3>Invite a teammate</h3><p>Invite someone to this local shared workspace. Codes expire after 24 hours and can be used once.</p><button id="create-invite" type="button" class="btn btn-outline-secondary">Create invitation</button><div id="invite-result" hidden><output id="invite-code" aria-label="Invitation code" tabindex="0"></output><button id="copy-invite" type="button" class="btn btn-outline-secondary">Copy code</button></div></div></div><p id="account-settings-status" class="form-status" role="status" aria-live="polite"></p></section>
     <div class="settings-footer"><p id="preferences-status" role="status" aria-live="polite">Preferences are saved in this browser.</p><button id="reset-preferences" class="btn btn-outline-secondary" type="button">Reset preferences</button></div>
-  </div><aside class="settings-aside" aria-label="Workspace preview"><div class="workspace-preview"><div class="preview-topline"><span aria-hidden="true">● ● ●</span><span>Workspace preview</span></div><div class="preview-content"><div class="preview-orbit" aria-hidden="true"><i></i><i></i><b></b></div><h2>A space for your next big idea.</h2><p>Research, build, and deliver with a team that fits the mission.</p><div class="preview-message" aria-hidden="true"><span></span><span></span><span></span></div><div class="preview-composer" aria-hidden="true"><span></span><b>↑</b></div></div></div><div class="settings-connection-note"><h2>Model &amp; connections</h2><p>Manage model credentials and connected tools in Connectors.</p><a href="/connectors" data-goto="connectors">Open Connectors</a><span aria-hidden="true"> ↗</span></div></aside></div>
+  </div></div>
 </section>
 
-<footer>COLLECTIVE 101 <span>Clarity in the work. Evidence in the result.</span></footer>
+<footer>COLLECTIVE 101</footer>
 <section id="view-evaluations" class="view d-none" aria-labelledby="evaluations-heading">
   <div class="section-heading"><div><span class="eyebrow">MEASURED WORK</span><h1 id="evaluations-heading">Effectiveness</h1><p class="text-secondary">Judge agents by the work they can demonstrate. A role is not a score.</p></div></div>
   <div id="evaluation-notice" class="alert alert-light" role="status">Loading evaluation evidence…</div>

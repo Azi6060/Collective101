@@ -2,6 +2,7 @@
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import {mkdir,writeFile} from 'node:fs/promises';
 export const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 export const resultText=result=>result.content.filter(c=>c.type==='text').map(c=>c.text).join('\n');
 export async function inspect(browser,fn) {
@@ -25,11 +26,21 @@ export async function connectBrowser(origin='http://127.0.0.1:8765',options={}) 
   const url=new URL(origin);
   if(url.protocol!=='http:'||!['127.0.0.1','localhost'].includes(url.hostname))throw new Error('Browser test target must be this local workspace');
   if(options.allowLoopbackPreviews&&process.env.COLLECTIVE101_ISOLATED_TEST!=='1')throw new Error('Dynamic preview ports are allowed only in the isolated test harness');
+  const mediaOptions=[];
+  if(options.syntheticAudio){
+    if(process.env.COLLECTIVE101_ISOLATED_TEST!=='1'||url.port==='8765')throw new Error('Synthetic microphone testing requires disposable test state');
+    const directory=path.join(root,'work/playwright/waveform-fixtures');await mkdir(directory,{recursive:true});
+    const wav=Buffer.alloc(44+48000*4*2);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(48000,24);wav.writeUInt32LE(96000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);
+    for(let i=0;i<48000*4;i++)wav.writeInt16LE(Math.round(Math.sin(i*2*Math.PI*220/48000)*(.15+.1*Math.sin(i*2*Math.PI/48000))*32767),44+i*2);
+    const audioPath=path.join(directory,'synthetic-tone.wav'),configPath=path.join(directory,'chrome.json');await writeFile(audioPath,wav);
+    await writeFile(configPath,JSON.stringify({browser:{launchOptions:{args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream','--use-file-for-fake-audio-capture='+audioPath,'--mute-audio']},contextOptions:{permissions:['microphone']}}}));
+    mediaOptions.push('--config',configPath);
+  }
   const env=Object.fromEntries(['PATH','SYSTEMROOT','WINDIR','TEMP','TMP','LOCALAPPDATA'].filter(k=>process.env[k]).map(k=>[k,process.env[k]]));
   const transport=new StdioClientTransport({command:process.execPath,cwd:root,env,stderr:'pipe',args:[
     path.join(root,'node_modules/@playwright/mcp/cli.js'),'--browser','chrome','--headless','--isolated','--sandbox',
     '--block-service-workers','--no-webmcp','--ignore-roots','--allowed-origins',options.allowLoopbackPreviews?url.origin+';http://127.0.0.1:*':url.origin,
-    '--output-dir',path.join(root,'work/playwright'),'--viewport-size','1440x1000']});
+    '--output-dir',path.join(root,'work/playwright'),'--viewport-size','1440x1000',...mediaOptions]});
   let stderr='';transport.stderr?.on('data',chunk=>{stderr=(stderr+chunk.toString()).slice(-4000);});
   const client=new Client({name:'collective101-browser-testing',version:'1.0.0'},{capabilities:{}});
   try{await client.connect(transport);}catch(error){throw new Error(error.message+' '+stderr);}
