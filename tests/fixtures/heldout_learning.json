@@ -1,0 +1,245 @@
+{
+  "evidence_mode": "deterministic_fixture",
+  "warning": "Synthetic evidence validates retrieval, provenance, contribution recording, and threshold contracts only. It is not proof of agent learning or live responsibility.",
+  "memory_wiring_case": {
+    "id": "memory-in-agent-context-isolated-and-frozen-on-retry",
+    "agent_id": "engineering-003",
+    "provider_mode": "fixture",
+    "objective": "Improve onboarding accessibility for first-time users",
+    "task_instructions": "Use the onboarding accessibility checklist.",
+    "seed_run": "prior-reviewed-run",
+    "current_run": "active-memory-run",
+    "late_run": "arrived-during-retry",
+    "other_agent": "engineering-004",
+    "other_provider": "meta",
+    "expected_prior_experience_runs": ["prior-reviewed-run"],
+    "expected_memory_card_sources": [["prior-reviewed-run"]],
+    "expected_attempts": 2
+  },
+  "memory_cases": [
+    {
+      "id": "raw-memory-relevance-and-scope",
+      "type": "raw_experience",
+      "agent_id": "engineering-003",
+      "provider": "fixture",
+      "current_run": "active-memory-run",
+      "query": "onboarding accessibility",
+      "episodes": [
+        {
+          "run_id": "raw-old",
+          "agent_id": "engineering-003",
+          "provider": "fixture",
+          "summary": "Onboarding accessibility checklist for new users."
+        },
+        {
+          "run_id": "raw-middle",
+          "agent_id": "engineering-003",
+          "provider": "fixture",
+          "summary": "Onboarding accessibility review for keyboard navigation."
+        },
+        {
+          "run_id": "raw-third",
+          "agent_id": "engineering-003",
+          "provider": "fixture",
+          "summary": "Onboarding accessibility notes for readable forms."
+        },
+        {
+          "run_id": "raw-newest",
+          "agent_id": "engineering-003",
+          "provider": "fixture",
+          "summary": "Onboarding accessibility observations for new users."
+        },
+        {
+          "run_id": "raw-unrelated",
+          "agent_id": "engineering-003",
+          "provider": "fixture",
+          "summary": "Release schedule and deployment checklist."
+        },
+        {
+          "run_id": "active-memory-run",
+          "agent_id": "engineering-003",
+          "provider": "fixture",
+          "summary": "Onboarding accessibility evidence from the current run."
+        },
+        {
+          "run_id": "other-agent-memory",
+          "agent_id": "data-003",
+          "provider": "fixture",
+          "summary": "Onboarding accessibility notes from another identity."
+        },
+        {
+          "run_id": "other-provider-memory",
+          "agent_id": "engineering-003",
+          "provider": "meta",
+          "summary": "Onboarding accessibility notes from another provider."
+        }
+      ],
+      "expected_run_ids": ["raw-newest", "raw-third", "raw-middle"]
+    },
+    {
+      "id": "consolidated-memory-source-provenance",
+      "type": "consolidated_cards",
+      "agent_id": "engineering-004",
+      "provider": "fixture",
+      "current_run": "active-card-run",
+      "query": "recovery backups",
+      "entries": [
+        {
+          "agent_id": "engineering-004",
+          "provider": "fixture",
+          "source_runs": ["source-a", "source-b", "source-a"],
+          "content": {
+            "objective": "Recovery backup guide",
+            "phase": "work",
+            "summary": "Use recovery backups and restore drills."
+          }
+        },
+        {
+          "agent_id": "engineering-004",
+          "provider": "fixture",
+          "source_runs": ["active-card-run"],
+          "content": {
+            "objective": "Recovery backup current run",
+            "phase": "work",
+            "summary": "Review recovery backups today."
+          }
+        },
+        {
+          "agent_id": "engineering-005",
+          "provider": "fixture",
+          "source_runs": ["other-agent-source"],
+          "content": {
+            "objective": "Recovery backup other agent",
+            "phase": "work",
+            "summary": "Recovery backups from another agent."
+          }
+        },
+        {
+          "agent_id": "engineering-004",
+          "provider": "meta",
+          "source_runs": ["other-provider-source"],
+          "content": {
+            "objective": "Recovery backup other provider",
+            "phase": "work",
+            "summary": "Recovery backups from another provider."
+          }
+        }
+      ],
+      "expected_cards": [
+        {
+          "summary": "Use recovery backups and restore drills.",
+          "evidence_runs": ["source-a", "source-b"],
+          "kind": "reviewed_memory_not_policy"
+        }
+      ]
+    }
+  ],
+  "responsibility_cases": [
+    {
+      "id": "fixture-evidence-does-not-qualify",
+      "agent_id": "distribution-003",
+      "evidence": [
+        {"provider": "meta", "objective": "fixture-one", "accepted": true, "checked": true, "live": false, "evidence_run": "fixture-1"},
+        {"provider": "meta", "objective": "fixture-two", "accepted": true, "checked": true, "live": false, "evidence_run": "fixture-2"},
+        {"provider": "meta", "objective": "fixture-three", "accepted": true, "checked": true, "live": false, "evidence_run": "fixture-3"}
+      ],
+      "expected": {"level": "developing", "distinct_verified_missions": 0, "recent_failures": 0, "evidence_runs": []}
+    },
+    {
+      "id": "acceptance-and-own-artifact-boundary",
+      "agent_id": "research-003",
+      "evidence": [
+        {"provider": "meta", "objective": "verified-one", "accepted": true, "checked": true, "live": true, "evidence_run": "verified-1"},
+        {"provider": "meta", "objective": "verified-two", "accepted": true, "checked": true, "live": true, "evidence_run": "verified-2"},
+        {"provider": "meta", "objective": "rejected", "accepted": false, "checked": true, "live": true, "evidence_run": "rejected-1"},
+        {"provider": "meta", "objective": "unchecked", "accepted": true, "checked": false, "live": true, "evidence_run": "unchecked-1"}
+      ],
+      "expected": {"level": "developing", "distinct_verified_missions": 2, "recent_failures": 1, "evidence_runs": ["verified-1", "verified-2", "rejected-1", "unchecked-1"]}
+    },
+    {
+      "id": "trusted-contributor-three-distinct-objectives",
+      "agent_id": "research-004",
+      "evidence": [
+        {"provider": "meta", "objective": "trusted-one", "accepted": true, "checked": true, "live": true, "evidence_run": "trusted-1"},
+        {"provider": "meta", "objective": "trusted-two", "accepted": true, "checked": true, "live": true, "evidence_run": "trusted-2"},
+        {"provider": "meta", "objective": "trusted-three", "accepted": true, "checked": true, "live": true, "evidence_run": "trusted-3"}
+      ],
+      "expected": {"level": "trusted_contributor", "distinct_verified_missions": 3, "recent_failures": 0, "evidence_runs": ["trusted-1", "trusted-2", "trusted-3"]}
+    },
+    {
+      "id": "duplicate-objectives-do-not-inflate-count",
+      "agent_id": "research-005",
+      "evidence": [
+        {"provider": "meta", "objective": "duplicate-one", "accepted": true, "checked": true, "live": true, "evidence_run": "duplicate-1"},
+        {"provider": "meta", "objective": "duplicate-one", "accepted": true, "checked": true, "live": true, "evidence_run": "duplicate-2"},
+        {"provider": "meta", "objective": "duplicate-one", "accepted": true, "checked": true, "live": true, "evidence_run": "duplicate-3"},
+        {"provider": "meta", "objective": "duplicate-two", "accepted": true, "checked": true, "live": true, "evidence_run": "duplicate-4"},
+        {"provider": "meta", "objective": "duplicate-two", "accepted": true, "checked": true, "live": true, "evidence_run": "duplicate-5"},
+        {"provider": "meta", "objective": "duplicate-two", "accepted": true, "checked": true, "live": true, "evidence_run": "duplicate-6"}
+      ],
+      "expected": {"level": "developing", "distinct_verified_missions": 2, "recent_failures": 0, "evidence_runs": ["duplicate-1", "duplicate-2", "duplicate-3", "duplicate-4", "duplicate-5", "duplicate-6"]}
+    },
+    {
+      "id": "senior-threshold-and-old-failures",
+      "agent_id": "research-006",
+      "evidence": [
+        {"provider": "meta", "objective": "senior-one", "accepted": true, "checked": true, "live": true, "evidence_run": "senior-1"},
+        {"provider": "meta", "objective": "senior-two", "accepted": true, "checked": true, "live": true, "evidence_run": "senior-2"},
+        {"provider": "meta", "objective": "senior-three", "accepted": true, "checked": true, "live": true, "evidence_run": "senior-3"},
+        {"provider": "meta", "objective": "senior-four", "accepted": true, "checked": true, "live": true, "evidence_run": "senior-4"},
+        {"provider": "meta", "objective": "senior-five", "accepted": true, "checked": true, "live": true, "evidence_run": "senior-5"},
+        {"provider": "meta", "objective": "senior-six", "accepted": true, "checked": true, "live": true, "evidence_run": "senior-6"},
+        {"provider": "meta", "objective": "senior-seven", "accepted": true, "checked": true, "live": true, "evidence_run": "senior-7"},
+        {"provider": "meta", "objective": "senior-eight", "accepted": true, "checked": true, "live": true, "evidence_run": "senior-8"},
+        {"provider": "meta", "objective": "old-failure-one", "accepted": false, "checked": true, "live": true, "evidence_run": "old-failure-1"},
+        {"provider": "meta", "objective": "old-failure-two", "accepted": false, "checked": true, "live": true, "evidence_run": "old-failure-2"}
+      ],
+      "expected": {"level": "senior_contributor", "distinct_verified_missions": 8, "recent_failures": 0, "evidence_runs": ["senior-1", "senior-2", "senior-3", "senior-4", "senior-5", "senior-6", "senior-7", "senior-8", "old-failure-1", "old-failure-2"]}
+    },
+    {
+      "id": "two-recent-failures-demote",
+      "agent_id": "research-007",
+      "evidence": [
+        {"provider": "meta", "objective": "recent-failure-one", "accepted": false, "checked": true, "live": true, "evidence_run": "recent-failure-1"},
+        {"provider": "meta", "objective": "recent-one", "accepted": true, "checked": true, "live": true, "evidence_run": "recent-success-1"},
+        {"provider": "meta", "objective": "recent-failure-two", "accepted": false, "checked": true, "live": true, "evidence_run": "recent-failure-2"},
+        {"provider": "meta", "objective": "recent-two", "accepted": true, "checked": true, "live": true, "evidence_run": "recent-success-2"},
+        {"provider": "meta", "objective": "recent-three", "accepted": true, "checked": true, "live": true, "evidence_run": "recent-success-3"},
+        {"provider": "meta", "objective": "older-four", "accepted": true, "checked": true, "live": true, "evidence_run": "older-success-4"},
+        {"provider": "meta", "objective": "older-five", "accepted": true, "checked": true, "live": true, "evidence_run": "older-success-5"},
+        {"provider": "meta", "objective": "older-six", "accepted": true, "checked": true, "live": true, "evidence_run": "older-success-6"},
+        {"provider": "meta", "objective": "older-seven", "accepted": true, "checked": true, "live": true, "evidence_run": "older-success-7"},
+        {"provider": "meta", "objective": "older-eight", "accepted": true, "checked": true, "live": true, "evidence_run": "older-success-8"}
+      ],
+      "expected": {"level": "developing", "distinct_verified_missions": 8, "recent_failures": 2, "evidence_runs": ["recent-failure-1", "recent-success-1", "recent-failure-2", "recent-success-2", "recent-success-3", "older-success-4", "older-success-5", "older-success-6", "older-success-7", "older-success-8"]}
+    },
+    {
+      "id": "provider-specific-responsibility",
+      "agent_id": "research-008",
+      "provider_filter": "meta",
+      "evidence": [
+        {"provider": "meta", "objective": "provider-one", "accepted": true, "checked": true, "live": true, "evidence_run": "provider-meta-1"},
+        {"provider": "meta", "objective": "provider-two", "accepted": true, "checked": true, "live": true, "evidence_run": "provider-meta-2"},
+        {"provider": "fixture", "objective": "provider-other-one", "accepted": true, "checked": true, "live": true, "evidence_run": "provider-fixture-1"},
+        {"provider": "fixture", "objective": "provider-other-two", "accepted": true, "checked": true, "live": true, "evidence_run": "provider-fixture-2"},
+        {"provider": "fixture", "objective": "provider-other-three", "accepted": true, "checked": true, "live": true, "evidence_run": "provider-fixture-3"},
+        {"provider": "fixture", "objective": "provider-other-four", "accepted": true, "checked": true, "live": true, "evidence_run": "provider-fixture-4"}
+      ],
+      "expected": {"level": "developing", "distinct_verified_missions": 2, "recent_failures": 0, "evidence_runs": ["provider-meta-1", "provider-meta-2"]}
+    }
+  ],
+  "contribution_recording_cases": [
+    {
+      "id": "reviewed-own-artifact-is-checked-but-not-live",
+      "check_text": "Summarize supplied evidence",
+      "expected_status": "reviewed",
+      "expected": {"accepted": 1, "checked": 1, "live": 0, "repaired": 0}
+    },
+    {
+      "id": "failed-artifact-check-is-unaccepted-and-unchecked",
+      "check_text": "MISSING REQUIRED FIXTURE PHRASE",
+      "expected_status": "blocked",
+      "expected": {"accepted": 0, "checked": 0, "live": 0, "repaired": 0}
+    }
+  ]
+}

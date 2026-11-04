@@ -28,10 +28,12 @@ def describe(files):
 
 class PreviewManager:
     """One lazy listener per console, eight capability-scoped chat previews maximum."""
-    def __init__(self, console):
+    def __init__(self, console, scope_valid=None):
         self.console=console
         self.lock=threading.RLock()
         self.previews={}
+        self.scopes={}
+        self.scope_valid=scope_valid
         self.server=None
         self.thread=None
 
@@ -44,16 +46,21 @@ class PreviewManager:
         revision=hashlib.sha256(json.dumps([(f['path'],f['sha256']) for f in files]).encode()).hexdigest()
         return {'title':chat['title'],'status':chat['status'],'revision':revision,**meta}, {f['path']:f for f in files}
 
-    def open(self,cid,entry=None):
+    def open(self,cid,entry=None,scope=None):
         meta,_=self.snapshot(cid)
         if not meta['ready']:raise ValueError(meta['reason'])
         if entry is not None and entry not in meta['entries']:raise ValueError('Choose a saved HTML file to preview')
         with self.lock:
-            capability=next((key for key,value in self.previews.items() if value==cid),None)
+            for key in list(self.previews):
+                scope_key=self.scopes.get(key)
+                if scope_key is not None and self.scope_valid and not self.scope_valid(scope_key):
+                    self.previews.pop(key,None);self.scopes.pop(key,None)
+            capability=next((key for key,value in self.previews.items() if value==cid and self.scopes.get(key)==scope),None)
             if capability is None:
                 if len(self.previews)>=8:raise ValueError('Eight chat previews are already open. Restart the local server to clear preview links.')
                 capability=secrets.token_urlsafe(32)
                 self.previews[capability]=cid
+                self.scopes[capability]=scope
             if self.server is None:
                 self.server=ThreadingHTTPServer(('127.0.0.1',0),self.handler())
                 self.server.daemon_threads=True
@@ -62,12 +69,19 @@ class PreviewManager:
             url=f'http://127.0.0.1:{self.server.server_port}/p/{capability}/'
             return {'url':url,'entry':entry or meta['entries'][0]}
 
+    def revoke_scope(self,scope):
+        with self.lock:
+            for key in list(self.previews):
+                if self.scopes.get(key)==scope:
+                    self.previews.pop(key,None);self.scopes.pop(key,None)
+
     def close(self):
         with self.lock:
             if self.server:
                 self.server.shutdown();self.server.server_close();self.thread.join()
                 self.server=None;self.thread=None
             self.previews.clear()
+            self.scopes.clear()
 
     def handler(self):
         manager=self
@@ -98,7 +112,10 @@ class PreviewManager:
                 parts=path.split('/')
                 if len(parts)<4 or parts[:2]!=['','p']:return self.send(404,'Preview not found')
                 capability=parts[2]
-                with manager.lock:cid=manager.previews.get(capability)
+                with manager.lock:
+                    cid=manager.previews.get(capability)
+                    scope=manager.scopes.get(capability)
+                    if scope is not None and manager.scope_valid and not manager.scope_valid(scope):cid=None
                 if not cid:return self.send(404,'Preview link expired. Open Preview again from your chat.')
                 tail='/'.join(parts[3:])
                 if tail in {'','preview.js','preview.css'}:

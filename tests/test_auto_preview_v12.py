@@ -17,7 +17,7 @@ class AutomaticPreviewTests(unittest.TestCase):
    try:
     chat=console.submit('Build this MVP','meta','automatic-preview-code')
     while chat['id'] in console.active:time.sleep(.02)
-    result=console.chat(chat['id']);self.assertEqual(result['status'],'reviewed',result['error'])
+    result=console.chat(chat['id']);self.assertEqual(result['status'],'reviewed',json.dumps({'error':result['error'],'result':result.get('run',{}).get('result')},ensure_ascii=True)[:12000])
     self.assertTrue(result['brief']['browser_checks']);self.assertIn('browser_sandbox',result['brief']['allowed_capabilities'])
     checks=result['run']['result']['execution_results'];self.assertTrue(any(e.get('kind')=='browser' and e['result']['passed'] for e in checks))
    finally:console.close()

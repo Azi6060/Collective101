@@ -1,0 +1,425 @@
+{
+  "evidence_mode": "deterministic_fixture",
+  "warning": "These cases validate runtime behavior with scripted provider responses. They do not measure live-model intelligence, factual accuracy, or agent specialization.",
+  "cases": [
+    {
+      "id": "research-decision-brief",
+      "mission": {
+        "objective": "Use the supplied support observations to prepare a concise decision brief with research, options, and a stakeholder summary.",
+        "departments": ["research", "strategy", "communications"],
+        "inputs": {
+          "heldout_case_id": "research-decision-brief",
+          "observations": [
+            "New users often miss the first setup step.",
+            "Support questions repeat after releases."
+          ]
+        },
+        "constraints": ["Use only supplied observations and label recommendations as proposals."],
+        "acceptance_criteria": [
+          "Deliver a research brief, options comparison, and concise stakeholder summary."
+        ],
+        "allowed_capabilities": ["draft_artifact"],
+        "artifact_checks": [
+          {"type": "contains", "path": "research/brief.md", "text": "first setup step"},
+          {"type": "contains", "path": "strategy/options.md", "text": "setup checklist"},
+          {"type": "contains", "path": "communications/summary.md", "text": "proposed"}
+        ],
+        "max_repair_rounds": 0
+      },
+      "expected_departments": ["research", "strategy", "communications"],
+      "expected_dependency_edges": [["research", "strategy"], ["strategy", "communications"]],
+      "expected_paths": [
+        "research/brief.md",
+        "strategy/options.md",
+        "communications/summary.md"
+      ],
+      "plans": {
+        "research": {
+          "depends_on": [],
+          "tasks": [
+            {
+              "key": "evidence",
+              "title": "Summarize supplied support observations",
+              "instructions": "Summarize the two supplied observations and distinguish evidence from assumptions.",
+              "assignee": "research-003",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["brief.md"]
+            }
+          ]
+        },
+        "strategy": {
+          "depends_on": ["research"],
+          "tasks": [
+            {
+              "key": "options",
+              "title": "Compare practical onboarding options",
+              "instructions": "Compare lightweight options that address the supplied observations.",
+              "assignee": "strategy-004",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["options.md"]
+            }
+          ]
+        },
+        "communications": {
+          "depends_on": ["strategy"],
+          "tasks": [
+            {
+              "key": "summary",
+              "title": "Write a stakeholder summary",
+              "instructions": "Summarize the evidence and proposed option for stakeholders.",
+              "assignee": "communications-003",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["summary.md"]
+            }
+          ]
+        }
+      },
+      "artifacts": {
+        "evidence": "# Research brief\n\nThe supplied observations say new users often miss the first setup step and support questions repeat after releases. No additional evidence was provided.\n",
+        "options": "# Options comparison\n\nA proposed setup checklist addresses the missed first step. A proposed release FAQ may reduce repeated questions. These are options, not verified outcomes.\n",
+        "summary": "# Stakeholder summary\n\nThe observations point to setup clarity and repeated support questions. A setup checklist is a proposed first step; its effect should be measured.\n"
+      }
+    },
+    {
+      "id": "javascript-calculator",
+      "mission": {
+        "objective": "Implement a pure JavaScript add(a,b) function and verify positive, negative, and zero inputs.",
+        "departments": ["engineering", "assurance"],
+        "inputs": {"heldout_case_id": "javascript-calculator"},
+        "constraints": ["Create local draft files only. Do not deploy."],
+        "acceptance_criteria": [
+          "Provide an add(a,b) function that passes all three recorded runtime checks."
+        ],
+        "allowed_capabilities": ["draft_artifact", "javascript_sandbox"],
+        "artifact_checks": [
+          {"type": "contains", "path": "engineering/calculator.js", "text": "function add"}
+        ],
+        "execution_checks": [
+          {"path": "engineering/calculator.js", "expression": "add(2, 3)", "expected": 5},
+          {"path": "engineering/calculator.js", "expression": "add(-4, 1)", "expected": -3},
+          {"path": "engineering/calculator.js", "expression": "add(0, 0)", "expected": 0}
+        ],
+        "max_repair_rounds": 0
+      },
+      "expected_departments": ["engineering", "assurance"],
+      "expected_dependency_edges": [["engineering", "assurance"]],
+      "expected_paths": ["engineering/calculator.js", "assurance/checklist.md"],
+      "plans": {
+        "engineering": {
+          "depends_on": [],
+          "tasks": [
+            {
+              "key": "calculator",
+              "title": "Implement the pure add function",
+              "instructions": "Write a pure JavaScript add(a,b) function.",
+              "assignee": "engineering-003",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["calculator.js"]
+            }
+          ]
+        },
+        "assurance": {
+          "depends_on": ["engineering"],
+          "tasks": [
+            {
+              "key": "checklist",
+              "title": "Record the independent check plan",
+              "instructions": "Document the three requested input classes and that runtime evidence is required.",
+              "assignee": "assurance-005",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["checklist.md"]
+            }
+          ]
+        }
+      },
+      "artifacts": {
+        "calculator": "function add(a, b) { return a + b; }\n",
+        "checklist": "# Check plan\n\nRun positive, negative, and zero input checks. This plan is not execution evidence.\n"
+      }
+    },
+    {
+      "id": "sales-sql-summary",
+      "mission": {
+        "objective": "Summarize the supplied order amounts using a read-only SQL query and report the count and total.",
+        "departments": ["data", "assurance"],
+        "inputs": {
+          "heldout_case_id": "sales-sql-summary",
+          "tables": {"orders": [{"amount": 12}, {"amount": 8}, {"amount": 15}]}
+        },
+        "constraints": ["Use only the supplied in-memory table. Do not access or modify external data."],
+        "acceptance_criteria": [
+          "Provide a read-only SQL query whose observed result is three orders totaling 35."
+        ],
+        "allowed_capabilities": ["draft_artifact", "sql_sandbox"],
+        "artifact_checks": [
+          {"type": "contains", "path": "data/summary.sql", "text": "SELECT"}
+        ],
+        "data_checks": [
+          {
+            "path": "data/summary.sql",
+            "tables": {"orders": [{"amount": 12}, {"amount": 8}, {"amount": 15}]},
+            "expected_rows": [[3, 35]]
+          }
+        ],
+        "max_repair_rounds": 0
+      },
+      "expected_departments": ["data", "assurance"],
+      "expected_dependency_edges": [["data", "assurance"]],
+      "expected_paths": ["data/summary.sql", "assurance/validation.md"],
+      "plans": {
+        "data": {
+          "depends_on": [],
+          "tasks": [
+            {
+              "key": "query",
+              "title": "Write the bounded order summary query",
+              "instructions": "Write a read-only query returning order count and amount total.",
+              "assignee": "data-003",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["summary.sql"]
+            }
+          ]
+        },
+        "assurance": {
+          "depends_on": ["data"],
+          "tasks": [
+            {
+              "key": "validation",
+              "title": "Record expected SQL evidence",
+              "instructions": "Record that the result must show three rows and a total of 35.",
+              "assignee": "assurance-005",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["validation.md"]
+            }
+          ]
+        }
+      },
+      "artifacts": {
+        "query": "SELECT count(*), sum(amount) FROM orders;\n",
+        "validation": "# Expected result\n\nThe supplied in-memory fixture contains three orders totaling 35.\n"
+      }
+    },
+    {
+      "id": "accessible-quickstart",
+      "mission": {
+        "objective": "Draft an accessible standalone quickstart page and a short design specification for first-time users.",
+        "departments": ["design", "communications"],
+        "inputs": {"heldout_case_id": "accessible-quickstart"},
+        "constraints": ["Use local text only. Do not load external assets or claim browser testing."],
+        "acceptance_criteria": [
+          "Provide a standalone page with document language, title, viewport, main landmark, and one primary heading."
+        ],
+        "allowed_capabilities": ["draft_artifact"],
+        "artifact_checks": [
+          {"type": "exists", "path": "design/specification.md"},
+          {"type": "html", "path": "communications/quickstart.html"}
+        ],
+        "max_repair_rounds": 0
+      },
+      "expected_departments": ["design", "communications"],
+      "expected_dependency_edges": [["design", "communications"]],
+      "expected_paths": ["design/specification.md", "communications/quickstart.html"],
+      "plans": {
+        "design": {
+          "depends_on": [],
+          "tasks": [
+            {
+              "key": "specification",
+              "title": "Specify a concise accessible quickstart",
+              "instructions": "Specify a clear title, one main landmark, one primary heading, and readable setup steps.",
+              "assignee": "design-003",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["specification.md"]
+            }
+          ]
+        },
+        "communications": {
+          "depends_on": ["design"],
+          "tasks": [
+            {
+              "key": "quickstart",
+              "title": "Draft the standalone quickstart page",
+              "instructions": "Create a standalone HTML quickstart page using the design specification.",
+              "assignee": "communications-004",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["quickstart.html"]
+            }
+          ]
+        }
+      },
+      "artifacts": {
+        "specification": "# Quickstart design\n\nUse one clear page title, a main landmark, one primary heading, and short sequential setup steps.\n",
+        "quickstart": "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Quickstart</title></head><body><main><h1>Get started</h1><ol><li>Open the project.</li><li>Follow the setup steps.</li></ol></main></body></html>\n"
+      }
+    },
+    {
+      "id": "incorrect-code-is-blocked",
+      "expected_status": "blocked",
+      "mission": {
+        "objective": "Implement and verify a pure JavaScript add(a,b) function.",
+        "departments": ["engineering"],
+        "inputs": {"heldout_case_id": "incorrect-code-is-blocked"},
+        "constraints": ["Create local draft files only. Do not deploy."],
+        "acceptance_criteria": [
+          "Provide an add(a,b) function that passes both recorded runtime checks."
+        ],
+        "allowed_capabilities": ["draft_artifact", "javascript_sandbox"],
+        "artifact_checks": [
+          {"type": "contains", "path": "engineering/calculator.js", "text": "function add"}
+        ],
+        "execution_checks": [
+          {"path": "engineering/calculator.js", "expression": "add(2, 3)", "expected": 5},
+          {"path": "engineering/calculator.js", "expression": "add(-4, 1)", "expected": -3}
+        ],
+        "max_repair_rounds": 0
+      },
+      "expected_departments": ["engineering"],
+      "expected_paths": ["engineering/calculator.js"],
+      "expected_error": "Execution failed",
+      "plans": {
+        "engineering": {
+          "depends_on": [],
+          "tasks": [
+            {
+              "key": "calculator",
+              "title": "Implement the pure add function",
+              "instructions": "Write a pure JavaScript add(a,b) function.",
+              "assignee": "engineering-003",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["calculator.js"]
+            }
+          ]
+        }
+      },
+      "artifacts": {
+        "calculator": "function add(a, b) { return a - b; }\n"
+      }
+    },
+    {
+      "id": "release-readiness-pair",
+      "mission": {
+        "objective": "Prepare a bounded release note and operational rollback checklist from the supplied change.",
+        "departments": ["engineering", "operations"],
+        "inputs": {
+          "heldout_case_id": "release-readiness-pair",
+          "change": "A configuration validation check was added before startup."
+        },
+        "constraints": ["Do not deploy or claim a release occurred."],
+        "acceptance_criteria": [
+          "Provide an engineering change note and an operations rollback checklist based on the supplied change."
+        ],
+        "allowed_capabilities": ["draft_artifact"],
+        "artifact_checks": [
+          {"type": "contains", "path": "engineering/change.md", "text": "validation"},
+          {"type": "contains", "path": "operations/rollback.md", "text": "Restore"}
+        ],
+        "max_repair_rounds": 0
+      },
+      "expected_departments": ["engineering", "operations"],
+      "expected_paths": ["engineering/change.md", "operations/rollback.md"],
+      "expected_dependency_edges": [["engineering", "operations"]],
+      "plans": {
+        "engineering": {
+          "depends_on": [],
+          "tasks": [
+            {
+              "key": "change-note",
+              "title": "Document the startup validation change",
+              "instructions": "Document the added configuration validation before startup.",
+              "assignee": "engineering-004",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["change.md"]
+            }
+          ]
+        },
+        "operations": {
+          "depends_on": ["engineering"],
+          "tasks": [
+            {
+              "key": "rollback",
+              "title": "Prepare a rollback checklist",
+              "instructions": "Write a bounded rollback checklist for the startup validation change, including how to restore the prior configuration.",
+              "assignee": "operations-004",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["rollback.md"]
+            }
+          ]
+        }
+      },
+      "artifacts": {
+        "change-note": "# Change note\n\nA configuration validation check now runs before startup. This is a draft note; no release occurred.\n",
+        "rollback": "# Rollback checklist\n\n1. Pause the rollout.\n2. Restore the prior configuration.\n3. Confirm startup behavior before retrying.\n"
+      }
+    },
+    {
+      "id": "platform-assurance-boundary",
+      "mission": {
+        "objective": "Describe a capability boundary and independently record its acceptance checks.",
+        "departments": ["platform", "assurance"],
+        "inputs": {
+          "heldout_case_id": "platform-assurance-boundary",
+          "boundary": "Only approved read-only connector tools are selectable."
+        },
+        "constraints": ["Do not connect to a real MCP server or claim a live security audit."],
+        "acceptance_criteria": [
+          "Provide a capability boundary note and a separate verification checklist."
+        ],
+        "allowed_capabilities": ["draft_artifact"],
+        "artifact_checks": [
+          {"type": "contains", "path": "platform/boundary.md", "text": "read-only"},
+          {"type": "contains", "path": "assurance/checklist.md", "text": "permission"}
+        ],
+        "max_repair_rounds": 0
+      },
+      "expected_departments": ["platform", "assurance"],
+      "expected_paths": ["platform/boundary.md", "assurance/checklist.md"],
+      "expected_dependency_edges": [["platform", "assurance"]],
+      "plans": {
+        "platform": {
+          "depends_on": [],
+          "tasks": [
+            {
+              "key": "boundary",
+              "title": "Record the connector capability boundary",
+              "instructions": "Explain that only approved read-only connector tools are selectable and runtime grants remain scoped.",
+              "assignee": "platform-004",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["boundary.md"]
+            }
+          ]
+        },
+        "assurance": {
+          "depends_on": ["platform"],
+          "tasks": [
+            {
+              "key": "checklist",
+              "title": "List independent permission checks",
+              "instructions": "Record checks for identity, mission, and task permission intersections.",
+              "assignee": "assurance-004",
+              "depends_on": [],
+              "requires": ["draft_artifact"],
+              "outputs": ["checklist.md"]
+            }
+          ]
+        }
+      },
+      "artifacts": {
+        "boundary": "# Capability boundary\n\nOnly approved read-only connector tools are selectable. Runtime permission grants remain scoped.\n",
+        "checklist": "# Verification checklist\n\nCheck identity, mission, and task permission intersections. This fixture is not a live security audit.\n"
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+'use strict';
+// The new everyday controls share the existing fourteen-language preference catalog.
+(()=>{
+  const keys=['Search chats and files','Rename chat','Chat name','Save name','Filter files','Draft restored.','Discard draft','Retry','Remove','File attached.','Preferences saved.','Chat renamed.','Cancel','No matching files.','Searching saved work…','No matching chats or files.'];
+  const rows={
+    zh:['搜索聊天和文件','重命名聊天','聊天名称','保存名称','筛选文件','草稿已恢复。','丢弃草稿','重试','移除','文件已添加。','偏好设置已保存。','聊天已重命名。','取消','没有匹配的文件。','正在搜索已保存的内容…','没有匹配的聊天或文件。'],
+    es:['Buscar chats y archivos','Renombrar chat','Nombre del chat','Guardar nombre','Filtrar archivos','Borrador restaurado.','Descartar borrador','Reintentar','Quitar','Archivo adjuntado.','Preferencias guardadas.','Chat renombrado.','Cancelar','No hay archivos coincidentes.','Buscando trabajo guardado…','No hay chats ni archivos coincidentes.'],
+    hi:['चैट और फ़ाइलें खोजें','चैट का नाम बदलें','चैट का नाम','नाम सहेजें','फ़ाइलें फ़िल्टर करें','ड्राफ़्ट बहाल किया गया।','ड्राफ़्ट हटाएँ','फिर कोशिश करें','हटाएँ','फ़ाइल जोड़ी गई।','प्राथमिकताएँ सहेजी गईं।','चैट का नाम बदला गया।','रद्द करें','कोई मेल खाती फ़ाइल नहीं।','सहेजा गया काम खोजा जा रहा है…','कोई मेल खाती चैट या फ़ाइल नहीं।'],
+    ar:['البحث في المحادثات والملفات','إعادة تسمية المحادثة','اسم المحادثة','حفظ الاسم','تصفية الملفات','تمت استعادة المسودة.','حذف المسودة','إعادة المحاولة','إزالة','تم إرفاق الملف.','تم حفظ التفضيلات.','تمت إعادة تسمية المحادثة.','إلغاء','لا توجد ملفات مطابقة.','جارٍ البحث في العمل المحفوظ…','لا توجد محادثات أو ملفات مطابقة.'],
+    fr:['Rechercher des conversations et fichiers','Renommer la conversation','Nom de la conversation','Enregistrer le nom','Filtrer les fichiers','Brouillon restauré.','Supprimer le brouillon','Réessayer','Retirer','Fichier joint.','Préférences enregistrées.','Conversation renommée.','Annuler','Aucun fichier correspondant.','Recherche du travail enregistré…','Aucune conversation ni fichier correspondant.'],
+    pt:['Pesquisar conversas e arquivos','Renomear conversa','Nome da conversa','Salvar nome','Filtrar arquivos','Rascunho restaurado.','Descartar rascunho','Tentar novamente','Remover','Arquivo anexado.','Preferências salvas.','Conversa renomeada.','Cancelar','Nenhum arquivo correspondente.','Pesquisando trabalho salvo…','Nenhuma conversa ou arquivo correspondente.'],
+    ru:['Поиск чатов и файлов','Переименовать чат','Название чата','Сохранить название','Фильтр файлов','Черновик восстановлен.','Удалить черновик','Повторить','Убрать','Файл прикреплён.','Настройки сохранены.','Чат переименован.','Отмена','Нет подходящих файлов.','Поиск сохранённой работы…','Нет подходящих чатов или файлов.'],
+    bn:['চ্যাট ও ফাইল খুঁজুন','চ্যাটের নাম বদলান','চ্যাটের নাম','নাম সংরক্ষণ করুন','ফাইল ফিল্টার করুন','খসড়া ফিরিয়ে আনা হয়েছে।','খসড়া বাদ দিন','আবার চেষ্টা করুন','সরান','ফাইল যুক্ত হয়েছে।','পছন্দ সংরক্ষিত হয়েছে।','চ্যাটের নাম বদলানো হয়েছে।','বাতিল','কোনো মিল পাওয়া ফাইল নেই।','সংরক্ষিত কাজ খোঁজা হচ্ছে…','কোনো মিল পাওয়া চ্যাট বা ফাইল নেই।'],
+    de:['Chats und Dateien suchen','Chat umbenennen','Chatname','Namen speichern','Dateien filtern','Entwurf wiederhergestellt.','Entwurf verwerfen','Erneut versuchen','Entfernen','Datei angehängt.','Einstellungen gespeichert.','Chat umbenannt.','Abbrechen','Keine passenden Dateien.','Gespeicherte Arbeit wird gesucht…','Keine passenden Chats oder Dateien.'],
+    ja:['チャットとファイルを検索','チャット名を変更','チャット名','名前を保存','ファイルを絞り込む','下書きを復元しました。','下書きを破棄','再試行','削除','ファイルを添付しました。','設定を保存しました。','チャット名を変更しました。','キャンセル','一致するファイルはありません。','保存済みの作業を検索中…','一致するチャットやファイルはありません。'],
+    ko:['채팅 및 파일 검색','채팅 이름 변경','채팅 이름','이름 저장','파일 필터','초안을 복원했습니다.','초안 삭제','다시 시도','제거','파일을 첨부했습니다.','설정을 저장했습니다.','채팅 이름을 변경했습니다.','취소','일치하는 파일이 없습니다.','저장된 작업 검색 중…','일치하는 채팅이나 파일이 없습니다.'],
+    id:['Cari percakapan dan berkas','Ubah nama percakapan','Nama percakapan','Simpan nama','Filter berkas','Draf dipulihkan.','Buang draf','Coba lagi','Hapus','Berkas dilampirkan.','Preferensi disimpan.','Nama percakapan diubah.','Batal','Tidak ada berkas yang cocok.','Mencari pekerjaan tersimpan…','Tidak ada percakapan atau berkas yang cocok.'],
+    ms:['Cari sembang dan fail','Namakan semula sembang','Nama sembang','Simpan nama','Tapis fail','Draf dipulihkan.','Buang draf','Cuba lagi','Alih keluar','Fail dilampirkan.','Keutamaan disimpan.','Sembang dinamakan semula.','Batal','Tiada fail yang sepadan.','Mencari kerja tersimpan…','Tiada sembang atau fail yang sepadan.']
+  };
+  for(const [code,values] of Object.entries(rows)){
+    if(values.length!==keys.length)throw new Error('Incomplete workspace controls: '+code);
+    window.CollectiveLocales.messages[code]={...window.CollectiveLocales.messages[code],...Object.fromEntries(keys.map((key,index)=>[key,values[index]]))};
+  }
+})();
