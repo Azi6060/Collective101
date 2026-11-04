@@ -24,12 +24,13 @@ def strings(value, field, maximum=32):
 def safe_path(value):
     text(value, "artifact path", 180)
     parts = PurePosixPath(value).parts
+    safe_dotfiles={'.env.example','.gitignore','.dockerignore'}
     if (not parts or PurePosixPath(value).is_absolute() or "\\" in value or ":" in value
-            or any(p in (".", "..") or p.startswith(".") or p.endswith((".", " ")) for p in parts)
+            or any(p in (".", "..") or (p.startswith(".") and p not in safe_dotfiles) or p.endswith((".", " ")) for p in parts)
             or value != "/".join(parts)):
         raise ValueError("Artifact path must be a normalized relative path")
     for part in parts:
-        if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_. -]*", part):
+        if part not in safe_dotfiles and not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_. -]*", part):
             raise ValueError("Unsafe artifact filename")
         if part.split(".")[0].upper() in {"CON", "PRN", "AUX", "NUL", *[f"COM{i}" for i in range(1, 10)], *[f"LPT{i}" for i in range(1, 10)]}:
             raise ValueError("Reserved artifact filename")
@@ -54,8 +55,8 @@ def mission_contract(value):
     if not isinstance(value.get("inputs", {}), dict):
         raise ValueError("inputs must be an object")
     import json
-    if len(json.dumps(value.get("inputs", {}))) > 40000:
-        raise ValueError("Mission inputs exceed the 40,000-character limit")
+    if len(json.dumps(value.get("inputs", {}))) > 600000:
+        raise ValueError("Mission inputs exceed the 600,000-character limit")
     allowed = strings(value.get("allowed_capabilities", ["draft_artifact"]), "allowed_capabilities")
     if any(c not in {"draft_artifact", "javascript_sandbox", "sql_sandbox", "browser_sandbox", "python_sandbox", "node_build_sandbox", "knowledge_read", "knowledge_search", "memory_search", "web_search"} and not is_connector_tool(c) for c in allowed):
         raise ValueError("Unknown executable capability")

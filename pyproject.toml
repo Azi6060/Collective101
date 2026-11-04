@@ -9,6 +9,9 @@ description = "An evidence-driven departmental agent organization"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+semantic = ["fastembed==0.9.1"]
+
 [project.scripts]
 collective101 = "collective101.cli:main"
 

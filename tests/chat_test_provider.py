@@ -6,6 +6,10 @@ from collective101.provider import Completion
 ROOT=Path(__file__).resolve().parents[1]
 class ChatTestProvider(DepartmentFixtureProvider):
     def complete(self,messages,tools=None):
+        if 'DIRECT_AGENT_CONVERSATION' in messages[0]['content']:
+            return Completion({'role':'assistant','content':json.dumps({'action':'reply','answer':'I am a Recovery Planner. I help diagnose failures and plan recovery. Engineering can build your website through organization chat.'})},25)
+        if 'ATTACHMENT_INTERPRETATION' in messages[0]['content']:
+            return Completion({'role':'assistant','content':json.dumps({'content':'Supplied image shows a green grocery brand.','limitations':['Scripted interpretation for UI testing only']})},25)
         context=json.loads(messages[1]['content'])
         if not isinstance(context,list):
             response=super().complete(messages,tools)

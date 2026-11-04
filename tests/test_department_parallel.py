@@ -50,7 +50,7 @@ class DepartmentParallelTests(unittest.TestCase):
         try:
             run=org.run(org.create(self.mission));self.assertEqual(run['status'],'reviewed',run['error']);self.assertEqual(provider.peak,1)
         finally:org.close()
-    def test_parallel_tool_admission_never_executes_more_than_shared_limit(self):
+    def test_parallel_tool_dispatch_records_all_granted_actions_without_shared_spending_quota(self):
         org=DepartmentOrganization(Path(self.temp.name)/'tools.db',OverlapProvider())
         try:
             mission={**self.mission,'allowed_capabilities':['draft_artifact','knowledge_search']}
@@ -60,8 +60,8 @@ class DepartmentParallelTests(unittest.TestCase):
             def slow(*args):time.sleep(.01);return {'status':'ok','results':[]}
             with patch.object(ToolBroker,'_run',side_effect=slow) as actual:
                 with ThreadPoolExecutor(max_workers=8) as pool:results=list(pool.map(execute,range(48)))
-            self.assertEqual(actual.call_count,40)
-            self.assertEqual(sum(r['status']=='ok' for r in results),40)
+            self.assertEqual(actual.call_count,48)
+            self.assertEqual(sum(r['status']=='ok' for r in results),48)
         finally:org.close()
 
 if __name__=='__main__':unittest.main()

@@ -275,34 +275,11 @@ test('saved-page thumbnail UI uses the capture result and discloses failures wit
   }finally{app.dom.window.close();}
 });
 
-test('Effectiveness exposes honest scorecards and versioned role cases without starting paid work',async()=>{
+test('Effectiveness remains developer-only and is not exposed in the product UI',async()=>{
   const app=await setup();try{
-    app.doc.querySelector('[data-nav="evaluations"]').click();
-    await waitFor(()=>app.doc.querySelectorAll('#evaluation-agents tr').length===101);
-    assert.ok(app.doc.querySelectorAll('[name="evaluation-case"]').length>=22);
-    assert.match(app.doc.getElementById('evaluation-policy').textContent,/80%/);
-    assert.match(app.doc.getElementById('evaluation-notice').textContent,/Fixtures never count/);
-    assert.equal(app.doc.getElementById('start-evaluation').disabled,true);
-    await waitFor(()=>app.doc.getElementById('memory-evidence').textContent.includes('frozen snapshot'));
-    assert.match(app.doc.getElementById('memory-evidence').textContent,/frozen snapshot/);
-    const search=app.doc.getElementById('evaluation-search');search.value='engineering-001';search.dispatchEvent(new app.win.Event('input'));
-    assert.equal(app.doc.querySelectorAll('#evaluation-agents tr').length,1);
-    assert.match(app.doc.getElementById('evaluation-agents').textContent,/untested/);
-    assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
-});
-
-test('confirmed evaluation uses only injected test provider and its fixtures cannot promote effectiveness',async()=>{
-  const app=await setup({live_configured:true});try{
-    app.doc.querySelector('[data-nav="evaluations"]').click();
-    await waitFor(()=>app.doc.querySelector('[name="evaluation-case"][value="intake-greeting"]'));
-    app.doc.querySelector('[name="evaluation-case"][value="intake-greeting"]').checked=true;
-    app.doc.getElementById('evaluation-calls').value='10';app.doc.getElementById('evaluation-confirm').checked=true;
-    submit(app.win,app.doc.getElementById('evaluation-form'));
-    await waitFor(async()=>{await app.poll();return app.doc.getElementById('evaluation-detail').textContent.includes('Passed');});
-    assert.match(app.doc.getElementById('evaluation-detail').textContent,/fixture/);
-    assert.equal(app.doc.getElementById('evaluation-confirm').checked,false);
-    assert.equal(app.doc.querySelectorAll('#evaluation-agents .meets_benchmark').length,0);
+    assert.equal(app.doc.querySelector('[data-nav="evaluations"]'),null);
+    assert.equal(app.doc.getElementById('view-evaluations'),null);
+    assert.equal(app.doc.querySelector('[href="/evaluations"]'),null);
     assert.deepEqual(app.errors,[]);
   }finally{app.dom.window.close();}
 });

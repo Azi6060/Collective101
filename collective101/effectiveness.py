@@ -1,9 +1,9 @@
 """Persisted, bounded role evaluations. Fixtures never establish live effectiveness."""
 import hashlib,json,math,threading,time,uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor,wait,FIRST_COMPLETED
 from pathlib import Path
 from . import benchmarks,learning
-from .evaluations import MeteredProvider
+from .evaluations import MeteredProvider,EvaluationBudgetExceeded
 from .model_requests import RetryState,complete_request,MAX_REQUESTS
 from .provider import parse_object,ProviderError
 from .store import encode,now
@@ -121,15 +121,18 @@ class EvaluationService:
     def start(self,payload):
         if payload.get('confirm_live') is not True:raise ValueError('Confirm that a live evaluation uses provider credits')
         selected=payload.get('cases');trials=payload.get('trials',1);modes=payload.get('modes',['specialist'])
-        calls=payload.get('max_calls',80);units=payload.get('max_units',2000000)
-        if not isinstance(selected,list) or not 1<=len(selected)<=12 or len(set(selected))!=len(selected) or any(c not in self.cases for c in selected):raise ValueError('Select 1 to 12 known benchmark cases')
-        if type(trials) is not int or not 1<=trials<=3:raise ValueError('Trials must be 1 to 3 per case')
+        calls=payload.get('max_calls',0);units=payload.get('max_units',0)
+        if (not isinstance(selected,list) or not 1<=len(selected)<=len(self.cases)
+            or any(not isinstance(c,str) for c in selected) or len(set(selected))!=len(selected)
+            or any(c not in self.cases for c in selected)):
+            raise ValueError(f'Select 1 to {len(self.cases)} distinct known benchmark cases')
+        if type(trials) is not int or trials<1:raise ValueError('Trials must be a positive integer per case')
         if not isinstance(modes,list) or not modes or len(set(modes))!=len(modes) or set(modes)-{'specialist','generalist','organization','memory_off','memory_on'}:raise ValueError('Invalid evaluation modes')
         if 'organization' in modes and any(self.cases[c]['id']!='engineering-add' for c in selected):raise ValueError('Organization comparison currently supports the addition benchmark only; other roles remain explicit specialist cases')
-        if type(calls) is not int or not 1<=calls<=160 or type(units) is not int or not 10000<=units<=2000000:raise ValueError('Evaluation budget must be 1–160 calls and 10,000–2,000,000 admission units')
+        if type(calls) is not int or calls<0 or type(units) is not int or units<0:raise ValueError('Evaluation spending allowances must be nonnegative; zero means unlimited')
         provider=self.console.provider_factory('meta')
         config={'cases':selected,'trials':trials,'modes':modes,'max_calls':calls,'max_units':units,
-            'per_trial_calls':min(40,calls),'per_trial_units':min(1000000,units)}
+            'per_trial_calls':min(40,calls) if calls else 0,'per_trial_units':min(1000000,units) if units else 0,'concurrency':4}
         config['case_snapshots']={cid:self.cases[cid] for cid in selected}
         config['agent_snapshots']={self.cases[cid]['agent_id']:self.console.organization.roster[self.cases[cid]['agent_id']] for cid in selected}
         signature=encode({'mode':provider.name,'model':getattr(provider,'model',None),'url':getattr(provider,'url',None)})
@@ -147,7 +150,7 @@ class EvaluationService:
                 if not exact:filtered.append(memory)
             config['memory_snapshots'][cid]=filtered[:6]
         role_digest=hashlib.sha256(encode(self.console.organization.roster).encode()).hexdigest()
-        metadata={'provider':provider.name,'model':getattr(provider,'model',None),'endpoint_host':urlsplit(getattr(provider,'url','') or '').hostname,'suite':benchmarks.VERSION,'harness':'effectiveness-v1','roles_sha256':role_digest,
+        metadata={'provider':provider.name,'model':getattr(provider,'model',None),'endpoint_host':urlsplit(getattr(provider,'url','') or '').hostname,'suite':benchmarks.VERSION,'harness':'effectiveness-v2-unlimited','concurrency':config['concurrency'],'roles_sha256':role_digest,
             'memory_snapshot_sha256':hashlib.sha256(encode(config['memory_snapshots']).encode()).hexdigest(),
             'comparison_scope':'Equal per-trial caps within a shared batch budget; actual usage is reported. Memory arms share a frozen snapshot and exclude exact source-objective matches; broader contamination needs review.'}
         metadata['request_policy']=getattr(provider,'policy',{})
@@ -234,7 +237,9 @@ class EvaluationService:
                 contract=FORMATS['assess']
             prompt='Complete the task accurately within its supplied information and return one JSON object.' if mode=='generalist' else agent['system_prompt']
             content={'task':case['prompt'],'output_contract':contract}
-            if case['kind']=='head':content['employees']=self.console.organization._employees(case['department'])
+            if case['kind']=='head':
+                signature=encode({'mode':meter.name,'model':getattr(meter,'model',None),'url':getattr(meter,'url',None)})
+                content['employees']=self.console.organization._employees(case['department'],provider_signature=signature)
             messages=[{'role':'system','content':prompt},{'role':'user','content':encode(content)}];phase='work'
         memories=[]
         if mode=='memory_on':
@@ -278,28 +283,53 @@ class EvaluationService:
         finally:org.close()
 
     def _run(self,rid,provider,stop):
-        report=self.detail(rid);config=report['configuration'];meter=MeteredProvider(provider,config['max_calls'],config['max_units'],should_stop=stop.is_set)
+        report=self.detail(rid);config=report['configuration']
+        meter=MeteredProvider(provider,config['max_calls'],config['max_units'],should_stop=stop.is_set)
+        exhausted=threading.Event()
+        def perform(trial):
+            if stop.is_set() or exhausted.is_set():return
+            tid=trial['id'];started=time.monotonic()
+            self.store.execute("UPDATE evaluation_trials SET status='running' WHERE id=?",(tid,))
+            trial_meter=MeteredProvider(meter,config['per_trial_calls'],config['per_trial_units'],should_stop=stop.is_set)
+            terminal='completed'
+            try:
+                case=config.get('case_snapshots',{}).get(trial['case_id'],self.cases[trial['case_id']])
+                result=self._trial(case,trial['mode'],trial_meter,tid,stop,rid)
+            except EvaluationCancelled:
+                result={'passed':None,'failure_kind':'cancelled','human_pending':False,'critical':False};terminal='cancelled'
+            except Exception as error:
+                provider_error=isinstance(error,ProviderError)
+                kind=getattr(error,'evaluation_failure_kind',None) or ('cancelled' if stop.is_set() else 'provider' if provider_error else 'budget' if isinstance(error,EvaluationBudgetExceeded) or 'budget' in str(error).lower() else 'quality' if isinstance(error,ValueError) else 'infrastructure')
+                result={'passed':False if kind=='quality' else None,'failure_kind':kind,'human_pending':False,'critical':False,
+                    'error':str(error)[:1000] if provider_error or kind=='budget' else 'Evaluation '+kind+' failure; inspect request diagnostics and the defined output contract.',
+                    'diagnostic':getattr(error,'diagnostic',None)}
+                if kind=='budget':
+                    terminal='budget_exhausted'
+                    if getattr(error,'meter',None) is meter:exhausted.set()
+                elif kind=='cancelled':terminal='cancelled'
+            self.store.execute('UPDATE evaluation_trials SET status=?,result=?,calls=?,tokens=?,seconds=? WHERE id=?',
+                (terminal,encode(result),trial_meter.calls,trial_meter.tokens,round(time.monotonic()-started,3),tid))
+            with meter.lock:
+                self.store.execute('UPDATE evaluation_runs SET calls=?,tokens=?,units=? WHERE id=?',(meter.calls,meter.tokens,meter.units,rid))
         try:
             self.store.execute("UPDATE evaluation_runs SET status='running' WHERE id=?",(rid,))
-            for trial in report['trials']:
-                if stop.is_set():break
-                if meter.calls>=meter.max_calls or meter.units>=meter.max_units:break
-                tid=trial['id'];before=meter.calls;tokens=meter.tokens;started=time.monotonic()
-                self.store.execute("UPDATE evaluation_trials SET status='running' WHERE id=?",(tid,))
-                trial_meter=MeteredProvider(meter,config['per_trial_calls'],config['per_trial_units'],should_stop=stop.is_set)
-                try:result=self._trial(self.cases[trial['case_id']],trial['mode'],trial_meter,tid,stop,rid)
-                except EvaluationCancelled:break
-                except Exception as error:
-                    provider_error=isinstance(error,ProviderError)
-                    kind=getattr(error,'evaluation_failure_kind',None) or ('cancelled' if stop.is_set() else 'provider' if provider_error else 'budget' if 'budget' in str(error).lower() else 'quality' if isinstance(error,ValueError) else 'infrastructure')
-                    result={'passed':False if kind=='quality' else None,'failure_kind':kind,'human_pending':False,'critical':False,
-                        'error':str(error)[:1000] if provider_error or kind=='budget' else 'Evaluation '+kind+' failure; inspect request diagnostics and the defined output contract.',
-                        'diagnostic':getattr(error,'diagnostic',None)}
-                self.store.execute('UPDATE evaluation_trials SET status=?,result=?,calls=?,tokens=?,seconds=? WHERE id=?',
-                    ('completed',encode(result),meter.calls-before,meter.tokens-tokens,round(time.monotonic()-started,3),tid))
-                self.store.execute('UPDATE evaluation_runs SET calls=?,tokens=?,units=? WHERE id=?',(meter.calls,meter.tokens,meter.units,rid))
-            pending=self.store.query("SELECT id FROM evaluation_trials WHERE run_id=? AND status IN ('queued','running')",(rid,))
-            status='cancelled' if stop.is_set() else 'budget_exhausted' if pending else 'completed'
+            iterator=iter(report['trials']);active=set();concurrency=max(1,min(4,config.get('concurrency',1)))
+            with ThreadPoolExecutor(max_workers=concurrency,thread_name_prefix='evaluation-trial') as pool:
+                def fill():
+                    while len(active)<concurrency and not stop.is_set() and not exhausted.is_set():
+                        trial=next(iterator,None)
+                        if trial is None:break
+                        active.add(pool.submit(perform,trial))
+                fill()
+                while active:
+                    done,_=wait(active,return_when=FIRST_COMPLETED)
+                    for future in done:active.remove(future);future.result()
+                    fill()
+            rows=self.store.query('SELECT status,result FROM evaluation_trials WHERE run_id=?',(rid,))
+            results=[json.loads(row['result']) for row in rows if row['result']]
+            status=('cancelled' if stop.is_set() else 'budget_exhausted' if exhausted.is_set() or any(row['status']=='budget_exhausted' for row in rows)
+                    else 'completed_with_errors' if any(value.get('failure_kind') in {'provider','infrastructure','quality'} or value.get('passed') is False for value in results)
+                    else 'completed_pending_review' if any(value.get('human_pending') for value in results) else 'completed')
             self.store.execute("UPDATE evaluation_trials SET status=? WHERE run_id=? AND status IN ('queued','running')",(status,rid))
             self.store.execute('UPDATE evaluation_runs SET status=?,calls=?,tokens=?,units=? WHERE id=?',(status,meter.calls,meter.tokens,meter.units,rid))
         except Exception:

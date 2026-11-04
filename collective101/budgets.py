@@ -5,7 +5,7 @@ This deliberately conservative estimate is not an exact tokenizer or invoice.
 Failed/uncertain requests retain their reservation, including across restart.
 """
 from .store import CallBudgetExceeded, encode
-from .context_limits import check_input,MAX_ADMISSION_UNITS
+from .context_limits import check_input
 
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS org_budgets(
@@ -17,20 +17,21 @@ CREATE TABLE IF NOT EXISTS console_permissions(chat_id TEXT PRIMARY KEY, web_sea
 CREATE TABLE IF NOT EXISTS console_safety(chat_id TEXT PRIMARY KEY, reason TEXT NOT NULL, acknowledged INTEGER NOT NULL DEFAULT 0);
 '''
 
-def create_budget(store,key,max_calls=160,max_tokens=MAX_ADMISSION_UNITS):
-    if type(max_calls) is not int or not 1<=max_calls<=160:
-        raise ValueError('Task call cap must be between 1 and 160')
-    if type(max_tokens) is not int or not 4096<=max_tokens<=MAX_ADMISSION_UNITS:
-        raise ValueError(f'Task token admission cap must be between 4096 and {MAX_ADMISSION_UNITS}')
+def create_budget(store,key,max_calls=0,max_tokens=0):
+    # Zero means no spending ceiling. Explicit positive values support historical callers.
+    if type(max_calls) is not int or max_calls<0:
+        raise ValueError('Task call allowance must be nonnegative; zero means unlimited')
+    if type(max_tokens) is not int or max_tokens<0:
+        raise ValueError('Task admission allowance must be nonnegative; zero means unlimited')
     store.execute('INSERT OR IGNORE INTO org_budgets(id,max_calls,max_tokens) VALUES(?,?,?)',(key,max_calls,max_tokens))
 
 def reserve(store,key,messages,output_tokens=4096):
-    if type(output_tokens) is not int or not 1<=output_tokens<=32768:
+    if type(output_tokens) is not int or not 1<=output_tokens<=131072:
         raise ValueError('Invalid request output reservation')
     charge=check_input(messages)+output_tokens
     with store.transaction() as db:
         changed=db.execute('''UPDATE org_budgets SET calls=calls+1,charged_tokens=charged_tokens+?
-            WHERE id=? AND calls<max_calls AND charged_tokens+?<=max_tokens AND reported_tokens+?<=max_tokens''',
+            WHERE id=? AND (max_calls=0 OR calls<max_calls) AND (max_tokens=0 OR (charged_tokens+?<=max_tokens AND reported_tokens+?<=max_tokens))''',
             (charge,key,charge,charge)).rowcount
         if not changed: raise CallBudgetExceeded('Task model-call or token admission budget exhausted; no further provider request was sent')
     return charge

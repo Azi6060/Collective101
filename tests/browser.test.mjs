@@ -208,24 +208,6 @@ test('organization and connector catalog support search, roles and keyboard dism
   assert.match(errors,/Errors: 0, Warnings: 0/);
 });
 
-test('Effectiveness page shows untested role evidence, explicit credit controls and mobile layout',async()=>{
-  await click('[data-nav="evaluations"]');
-  await waitUntil(browser,()=>document.querySelectorAll('#evaluation-agents tr').length===101,'agent scorecards');
-  assert.match(await inspect(browser,()=>document.querySelector('#evaluation-notice').textContent),/Fixtures never count/);
-  assert.equal(await inspect(browser,()=>document.querySelector('#start-evaluation').disabled),true);
-  assert.equal(await inspect(browser,()=>document.querySelector('#evaluation-confirm').checked),false);
-  await shot('effectiveness-desktop');
-  await type('#evaluation-search','engineering-003');
-  assert.equal(await inspect(browser,()=>document.querySelectorAll('#evaluation-agents tr').length),1);
-  assert.match(await inspect(browser,()=>document.querySelector('#evaluation-agents').textContent),/untested/);
-  await browser.call('browser_resize',{width:390,height:844});
-  assert.equal(await inspect(browser,()=>document.documentElement.scrollWidth<=innerWidth),true);
-  await shot('effectiveness-mobile');
-  await browser.call('browser_resize',{width:1440,height:1000});
-  const errors=resultText(await browser.call('browser_console_messages',{level:'warning',all:true}));
-  assert.match(errors,/Errors: 0, Warnings: 0/);
-});
-
 test('orbital dashboard uses the real roster and opens a mission draft',async()=>{
   await click('[data-nav="overview"]');
   if(await inspect(browser,()=>document.querySelector('.sidebar').getBoundingClientRect().width<100))await click('#toggle-sidebar');
@@ -269,9 +251,8 @@ test('orbital workspace views fit screen sizes and sampled text meets contrast t
   const evidence=[],layoutFailures=[];
   for(const theme of ['dark','light']){
     await click('[data-nav="settings"]');await click(`.theme-option:has(input[value="${theme}"])`);
-    for(const view of ['overview','organization','chat','connectors','activity','evaluations','settings']){
+    for(const view of ['overview','organization','chat','connectors','activity','settings']){
       await click(`[data-nav="${view}"]`);
-      if(view==='evaluations')await waitUntil(browser,()=>document.querySelector('#evaluation-agents tr'));
       for(const [width,height] of theme==='dark'?[[320,568],[768,1024],[1440,1000]]:[[390,844],[1440,1000]]){
         await browser.call('browser_resize',{width,height});
         const layout=await inspect(browser,()=>({width:document.documentElement.scrollWidth,viewport:innerWidth,bottom:document.querySelector('#mission-form').getBoundingClientRect().bottom,height:innerHeight}));

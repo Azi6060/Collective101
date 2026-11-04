@@ -12,3 +12,23 @@ postman/.dependencies/
 third_party/agent-skills/
 
 node_modules/
+
+# Never distribute or track runtime databases and derived build/cache state
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.pyo
+.env.*
+!.env.example
+dist/
+.cache/
+
+*.db-journal
+*.sqlite-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.sqlite3-journal

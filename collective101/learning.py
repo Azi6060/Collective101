@@ -36,11 +36,11 @@ def review_lesson(store,id,accepted,note):
     return store.query('SELECT * FROM org_lessons WHERE id=?',(id,))[0]
 
 def recall_lessons(store,agent,provider,query):
-    terms=set(re.findall(r'\w{3,}',query.lower()));ranked=[]
-    for row in store.query("SELECT * FROM org_lessons WHERE agent_id=? AND provider=? AND status='approved' AND expires_at>? ORDER BY created_at DESC LIMIT 100",(agent,provider,now())):
-        score=len(terms&set(re.findall(r'\w{3,}',row['situation'].lower())))
-        if score:ranked.append((score,{**row,'kind':'reviewed_lesson_not_policy','learning_claim':'Human-reviewed reference; benefit requires held-out evaluation'}))
-    return [row for _,row in sorted(ranked,key=lambda item:-item[0])[:3]]
+    from .retrieval import rank
+    rows=store.query("SELECT * FROM org_lessons WHERE agent_id=? AND provider=? AND status='approved' AND expires_at>? ORDER BY created_at DESC LIMIT 100",(agent,provider,now()))
+    candidates=[{**row,'content':row['situation']+' '+row['action']+' '+row['outcome'],'kind':'reviewed_lesson_not_policy','learning_claim':'Human-reviewed reference; benefit requires held-out evaluation'} for row in rows]
+    return rank(query,candidates,limit=3,store=store,namespace='lessons:'+agent+':'+hashlib.sha256(provider.encode()).hexdigest())
+
 
 def consolidate(store,agent,provider,content,run_id):
     data=json.loads(content)
@@ -53,15 +53,11 @@ def consolidate(store,agent,provider,content,run_id):
     store.execute('DELETE FROM org_memory_cards WHERE agent_id=? AND provider=? AND topic NOT IN (SELECT topic FROM org_memory_cards WHERE agent_id=? AND provider=? ORDER BY updated_at DESC,topic LIMIT 50)',(agent,provider,agent,provider))
 
 def recall_cards(store,agent,provider,run_id,query):
-    terms=set(re.findall(r'\w{3,}',query.lower()))
+    from .retrieval import rank
     rows=store.query('SELECT content,sources FROM org_memory_cards WHERE agent_id=? AND provider=? ORDER BY updated_at DESC LIMIT 50',(agent,provider))
-    ranked=[]
-    for row in rows:
-        sources=json.loads(row['sources'])
-        if run_id in sources:continue
-        score=len(terms&set(re.findall(r'\w{3,}',row['content'].lower())))
-        if score:ranked.append((score,{'content':row['content'],'evidence_runs':sources,'kind':'reviewed_memory_not_policy'}))
-    return [r for _,r in sorted(ranked,key=lambda p:-p[0])[:3]]
+    candidates=[{'content':row['content'],'evidence_runs':json.loads(row['sources']),'kind':'reviewed_memory_not_policy'} for row in rows if run_id not in json.loads(row['sources'])]
+    return rank(query,candidates,limit=3,store=store,namespace='cards:'+agent+':'+hashlib.sha256(provider.encode()).hexdigest())
+
 
 def record_contributions(org,root,effective,result):
     mission=org.inspect(root)['mission']

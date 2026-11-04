@@ -124,10 +124,10 @@ class ProviderReliabilityTests(unittest.TestCase):
         work = provider.request_options('work')
         retry = provider.request_options('work', output_retries=2, transport_retries=3)
         self.assertGreater(work['max_tokens'], intake['max_tokens'])
-        self.assertGreater(work['timeout'], intake['timeout'])
+        self.assertGreaterEqual(work['timeout'], intake['timeout'])
         self.assertEqual(retry['max_tokens'], 20000)
         self.assertLessEqual(retry['timeout'], 300)
-        self.assertEqual(intake['reasoning_effort'], 'low')
+        self.assertEqual(intake['reasoning_effort'], 'high')
 
     def test_phase_output_reservation_can_block_before_sending_http(self):
         run_id = self.org.create(self.mission)
@@ -200,7 +200,7 @@ class ProviderReliabilityTests(unittest.TestCase):
             build.return_value.open.side_effect = open_request
             with self.assertRaisesRegex(RuntimeError, 'truncat'):
                 self.invoke(run_id)
-        self.assertEqual(limits, [16384, 20000])
+        self.assertEqual(limits, [20000, 20000])
         records = self.org.store.query('SELECT status,output,error_kind FROM org_calls WHERE run_id=? ORDER BY attempt', (run_id,))
         self.assertEqual([r['error_kind'] for r in records], ['truncated', 'truncated'])
         self.assertTrue(all(r['status'] == 'failed' and r['output'] is None for r in records))

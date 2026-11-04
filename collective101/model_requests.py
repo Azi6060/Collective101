@@ -44,7 +44,7 @@ class RetryState:
     def options(self,provider,phase):
         if hasattr(provider,'request_options'):
             return provider.request_options(phase,output_retries=self.output,transport_retries=self.transport)
-        return {'max_tokens':4096,'timeout':120,'reasoning_effort':'medium'}
+        return {'max_tokens':4096,'timeout':120,'reasoning_effort':'high'}
     def backoff(self):
         if self.transport:time.sleep(min(2**(self.transport-1),4))
     def failure(self,label,detail):

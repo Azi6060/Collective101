@@ -11,6 +11,7 @@ from . import budgets
 from . import progress
 from . import repairs
 from . import learning
+from . import assistance,replanning,recovery
 from .agent_tools import SCHEMA as TOOL_SCHEMA, ToolBroker, eligible_tools
 from .connectors import ConnectorManager
 from .runtime_core import POLICY_SCHEMA,policy,run_dag,validate_concurrency
@@ -57,7 +58,7 @@ class DepartmentOrganization:
         self.db_path=Path(db_path)
         self.store = Store(Path(db_path))
         with self.store.transaction() as db:
-            db.executescript(SCHEMA + budgets.SCHEMA + TOOL_SCHEMA + progress.SCHEMA + repairs.SCHEMA + learning.SCHEMA+POLICY_SCHEMA)
+            db.executescript(SCHEMA + budgets.SCHEMA + TOOL_SCHEMA + progress.SCHEMA + repairs.SCHEMA + learning.SCHEMA+POLICY_SCHEMA+assistance.SCHEMA+recovery.SCHEMA)
             from .model_requests import ensure_columns
             ensure_columns(db,'org_calls')
         self.provider = provider
@@ -70,15 +71,15 @@ class DepartmentOrganization:
     def close(self):
         self.store.close()
 
-    def create(self, mission, max_calls=160, max_tokens=budgets.MAX_ADMISSION_UNITS, budget_id=None):
+    def create(self, mission, max_calls=0, max_tokens=0, budget_id=None):
         mission = contracts.mission_contract(mission)
-        if type(max_calls) is not int or not 1 <= max_calls <= 1000:
-            raise ValueError('max_calls must be 1 to 1000')
+        if type(max_calls) is not int or max_calls<0:
+            raise ValueError('max_calls must be nonnegative; zero means unlimited')
         run_id = 'org_' + uuid.uuid4().hex[:12]
         self.store.execute('INSERT INTO org_runs(id,provider,status,mission,roster,max_calls,created_at) VALUES(?,?,?,?,?,?,?)',
             (run_id,self.provider_signature,'ready',encode(mission),encode(self.roster),max_calls,now()))
         budget_id = budget_id or run_id
-        budgets.create_budget(self.store,budget_id,min(max_calls,160),max_tokens)
+        budgets.create_budget(self.store,budget_id,max_calls,max_tokens)
         self.store.execute('INSERT INTO org_run_budgets VALUES(?,?)',(run_id,budget_id))
         self.store.execute('INSERT INTO org_execution_policy VALUES(?,?,?)',(run_id,self.concurrency,int(self.memory_enabled)))
         ConnectorManager(self.store,self.roster).bind(run_id,mission['allowed_capabilities'])
@@ -94,7 +95,7 @@ class DepartmentOrganization:
         return run
 
     def run(self, run_id):
-        return repairs.run_with_repairs(self,run_id)
+        return replanning.run(self,run_id)
 
     def _run_once(self, run_id):
         run = self.inspect(run_id)
@@ -106,11 +107,14 @@ class DepartmentOrganization:
         frozen_policy=policy(self.store,run_id);self.concurrency=frozen_policy['concurrency'];self.memory_enabled=bool(frozen_policy['memory_enabled'])
         self.harness = AgentHarness(self.store, self.provider, self.roster)
         self.bus = LeadershipBus(self.store, self.roster)
+        self.harness.help_handler=lambda *args:assistance.resolve(self,*args)
         self.store.execute("UPDATE org_runs SET status='running',error=NULL WHERE id=?", (run_id,))
         try:
             result = self._cycle(run_id, run['mission'])
             status = 'reviewed' if result['accepted'] else 'blocked'
             self.store.execute('UPDATE org_runs SET status=?,result=? WHERE id=?', (status,encode(result),run_id))
+        except assistance.ReplanRequired:
+            self.store.execute("UPDATE org_runs SET status='replanning',error=NULL WHERE id=?",(run_id,))
         except HumanInputRequired:
             self.store.execute("UPDATE org_runs SET status='needs_input' WHERE id=?", (run_id,))
         except RunPaused:
@@ -119,9 +123,10 @@ class DepartmentOrganization:
             self.store.execute("UPDATE org_runs SET status='blocked',error=? WHERE id=?", (str(error),run_id))
         return self.inspect(run_id)
 
-    def _employees(self, department):
+    def _employees(self, department,provider_signature=None):
         broker=ToolBroker(self.store,self.roster)
-        return [{**{k:a[k] for k in ('id','name','role','skills','responsibilities')},'responsibility_evidence':learning.responsibility(self.store,a['id'],self.provider_signature),'eligible_tools':[t['name'] for t in broker.catalog(a['id']) if t['available']]}
+        signature=self.provider_signature if provider_signature is None else provider_signature
+        return [{**{k:a[k] for k in ('id','name','role','skills','responsibilities')},'responsibility_evidence':learning.responsibility(self.store,a['id'],signature),'eligible_tools':[t['name'] for t in broker.catalog(a['id']) if t['available']]}
                 for a in self.roster.values() if a['department'] == department and a['role'] != 'department_lead']
 
     def _cycle(self, run_id, mission):
@@ -175,6 +180,7 @@ class DepartmentOrganization:
             lambda v: validate_selection(v,proposals))
         order = contracts.topological({d:proposals[d]['depends_on'] for d in chosen['departments']})
         reports,blockers,workers=self._execute_team(run_id,mission,order,proposals,chosen,call,send)
+        execution_results = self._execute_checks(run_id, mission)
         # One final leadership pass can resolve a concern that was true when an
         # upstream report was written but fulfilled by later departments.
         for department in order:
@@ -184,13 +190,12 @@ class DepartmentOrganization:
             for peer,content in peers.items():send('integration-handoff:'+peer+':'+department,peer+'-001',head,'integration.handoff',content)
             employee_results={r['message_key'].split(':',2)[-1]:json.loads(r['content']) for r in self.store.query("SELECT message_key,content FROM org_messages WHERE run_id=? AND recipient=? AND kind='task.result' ORDER BY rowid",(run_id,head))}
             final_report=call('final_report:'+department,head,'report',{'department':department,'integration_review':True,
-                'employee_results':employee_results,'artifact_ids':previous['artifact_ids'],
+                'employee_results':employee_results,'artifact_ids':previous['artifact_ids'],'execution_evidence':execution_results,
                 'saved_files':previous['published_artifacts'],'previous_report':previous,'head_reports':peers,
-                'instruction':'All selected departments have finished this attempt. Reassess only your earlier integration concerns against the actual saved peer files and original acceptance criteria. Clear waiting-for-copy/source concerns if fulfilled. Retain real unresolved original requirements. Do not invent extra requirements or claim unexecuted browser tests; optional unavailable tools are disclosed limitations. You cannot erase runtime task failures or missing permissions.'},
+                'instruction':'All selected departments have finished this attempt. Reassess only your earlier integration concerns against the actual saved peer files and original acceptance criteria. Clear waiting-for-copy/source or pending-execution concerns only when the supplied current execution_evidence and peer sources actually fulfill them. Retain failed execution and missing evidence. Retain real unresolved original requirements. Do not invent extra requirements or claim unexecuted browser tests; optional unavailable tools are disclosed limitations. You cannot erase runtime task failures or missing permissions.'},
                 lambda v,refs=previous['artifact_ids']:contracts.report(v,refs))
             reports[department]={**previous,**final_report,'integration_checked':True}
             send('integration-report:'+department,head,'director-001','department.final_report',reports[department])
-        execution_results = self._execute_checks(run_id, mission)
         # Heads supply artifacts; the independent reviewer never bypasses its head.
         review_head = 'assurance-001'
         for department, content in reports.items():
@@ -367,6 +372,14 @@ class DepartmentOrganization:
         by_path = {a['path']:a for a in artifacts}
         errors = []
         declared=[{'path':d['path'],'type':'html' if d['kind']=='html' else 'exists'} for d in mission.get('deliverables',[])]
+        for artifact in artifacts:
+            if artifact['path'].endswith('.py'):
+                import ast
+                try:ast.parse(artifact['content'],filename=artifact['path'])
+                except (SyntaxError,ValueError) as error:errors.append(artifact['path']+': Python source syntax is invalid'+(' at line '+str(error.lineno) if isinstance(error,SyntaxError) else ''))
+            elif artifact['path'].endswith('.json'):
+                try:json.loads(artifact['content'],parse_constant=lambda value:(_ for _ in ()).throw(ValueError('Nonfinite JSON')))
+                except (ValueError,TypeError):errors.append(artifact['path']+': JSON source is invalid')
         for check in mission['artifact_checks']+declared:
             artifact = by_path.get(check['path'])
             if not artifact:

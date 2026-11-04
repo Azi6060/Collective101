@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS org_web_approvals(
  run_id TEXT NOT NULL,agent_id TEXT NOT NULL,query_hash TEXT NOT NULL,question_id TEXT NOT NULL,
  PRIMARY KEY(run_id,agent_id,query_hash));'''
 CATALOG={
- 'browser_sandbox':{'description':'Observe/click/fill supplied static website files in isolated Chromium. Only selectors and explicit expectations; no external URLs, arbitrary evaluation or user browser sessions.','arguments':{'files':[{'path':'index.html','content':'<!doctype html><h1>Shop</h1>'}],'entry':'index.html','checks':[{'selector':'h1','contains':'Shop'}]}},
+ 'browser_sandbox':{'description':'Observe/click/fill supplied static website files in isolated Chromium. Selectors, explicit expectations and optional bounded viewport width/height for mobile controls; no external URLs, arbitrary evaluation or user browser sessions.','arguments':{'files':[{'path':'index.html','content':'<!doctype html><h1>Shop</h1>'}],'entry':'index.html','checks':[{'selector':'h1','contains':'Shop','viewport':{'width':390,'height':844}}]}},
  'python_sandbox':{'description':'Run a supplied Python entry in an offline, resource-limited Docker image. No host fallback; requires configured trusted runtime image.','arguments':{'files':[{'path':'main.py','content':'print(4)'}],'entry':'main.py'}},
  'node_build_sandbox':{'description':'Build supplied project source in an offline, resource-limited trusted Node/Docker dependency image. Returns bounded text build artifacts. No package downloads or host execution.','arguments':{'files':[{'path':'package.json','content':'{"scripts":{"build":"vite build"}}'}],'entry':'package.json'}},
  'sql_sandbox': {'description':'Run a bounded read-only SQL query over supplied JSON tables in memory. No host database or file access.', 'arguments':{'query':'SELECT sum(amount) FROM sales','tables':{'sales':[{'amount':2}]}}},
@@ -59,8 +59,8 @@ def lexical_score(query,content):
 def recall(store,agent_id,provider,run_id,query):
     rows=store.query('''SELECT run_id,content FROM org_experience WHERE agent_id=? AND provider=? AND run_id<>?
         ORDER BY rowid DESC LIMIT 100''',(agent_id,provider,run_id))
-    ranked=sorted(enumerate(rows),key=lambda pair:(-lexical_score(query,pair[1]['content']),pair[0]))
-    return [row for _,row in ranked[:3]]
+    from .retrieval import rank
+    return rank(query,rows,limit=3,store=store,namespace='episodes:'+agent_id+':'+hashlib.sha256(provider.encode()).hexdigest())
 
 
 class ToolBroker:
@@ -77,7 +77,7 @@ class ToolBroker:
             'scope':'shared/ and own department/ only' if name.startswith('knowledge_') else 'own accepted episodes' if name=='memory_search' else 'public search queries only' if name=='web_search' else 'no host access'} for name in names]+self.connectors.catalog(agent_id)
 
     def grants(self,agent_id,phase,mission,task,run_id=None):
-        if phase not in {'work','review','assess','coordinate','report','review_assignment','select','retrospective'}: return []
+        if phase not in {'work','review','assess','coordinate','report','review_assignment','select','retrospective','help','help_decision','replan'}: return []
         connected={t['name'] for t in self.connectors.catalog(agent_id)}
         if self.connectors.brave_ready(agent_id):connected.add('web_search')
         requested=(set(task.get('tools',[])) | set(task.get('requires',[]))) if phase in {'work','review'} else {'knowledge_read','knowledge_search','memory_search'}|connected
@@ -101,9 +101,7 @@ class ToolBroker:
                 previous=json.loads(old['result'])
                 if previous.get('status')=='running':return {'tool':name,'status':'failed','error':'Earlier tool dispatch is incomplete or interrupted; no duplicate action was sent'}
                 return previous
-            count=db.execute('SELECT COUNT(*) FROM org_tool_calls WHERE run_id=? OR run_id IN (SELECT run_id FROM org_run_budgets WHERE budget_id=(SELECT budget_id FROM org_run_budgets WHERE run_id=?))',(run_id,run_id)).fetchone()[0]
             if name not in grants:result={'status':'denied','error':'Tool needs an identity grant, mission permission and head assignment; no action taken'}
-            elif count>=40:result={'status':'limit','error':'Mission tool limit reached; no action taken'}
             else:result={'status':'running'}
             db.execute('INSERT INTO org_tool_calls VALUES(?,?,?,?,?,?,?)',(run_id,key,agent_id,name,encode(args),encode({'tool':name,**result}),now()))
         if result['status']=='running':
@@ -141,16 +139,16 @@ class ToolBroker:
             if not folder.is_dir() or folder.is_symlink() or getattr(folder.stat(),'st_file_attributes',0)&0x400: continue
             for base,dirs,files in os.walk(folder,followlinks=False):
                 directories+=1
-                if directories>200: return sorted(found,key=lambda x:-x['score'])[:5]
+                if directories>200: break
                 dirs[:]=sorted(d for d in dirs if not d.startswith('.') and not (Path(base)/d).is_symlink() and not getattr((Path(base)/d).stat(),'st_file_attributes',0)&0x400)
                 for filename in sorted(files):
                     count+=1
-                    if count>200: return sorted(found,key=lambda x:-x['score'])[:5]
+                    if count>200: break
                     try: item=self._read((Path(base)/filename).relative_to(self.root).as_posix(),department)
                     except (ValueError,PermissionError,OSError,UnicodeError): continue
-                    score=lexical_score(query,item['path']+' '+item['content'])
-                    if score: found.append({**item,'content':item['content'][:2000],'score':score})
-        return sorted(found,key=lambda x:-x['score'])[:5]
+                    found.append(item)
+        from .retrieval import rank
+        return [{**item,'content':item['content'][:2000]} for item in rank(query,found,store=self.store,namespace='knowledge:'+department)]
 
     def _run(self,name,args,agent_id,run_id):
         department=self.roster[agent_id]['department']

@@ -22,7 +22,7 @@ def main(argv=None):
     org_parser = sub.add_parser("organization", help="Run a generic department-led draft-artifact mission")
     org_parser.add_argument("--mission", type=Path, required=True)
     org_parser.add_argument("--provider", choices=("fixture", "meta"), default="meta")
-    org_parser.add_argument("--max-calls", type=int, default=160)
+    org_parser.add_argument("--max-calls", type=int, default=0)
     org_parser.add_argument("--output", type=Path)
     org_resume = sub.add_parser("organization-resume", help="Resume a recorded department-led mission")
     org_resume.add_argument("mission_id")
@@ -31,7 +31,7 @@ def main(argv=None):
     web_parser = sub.add_parser("serve", help="Open the local organization console")
     web_parser.add_argument("--port",type=int,default=8765)
     eval_parser=sub.add_parser('evaluate',help='Run bounded live routing, specialist and departmental evaluations in isolated state')
-    eval_parser.add_argument('--max-calls',type=int,default=80)
+    eval_parser.add_argument('--max-calls',type=int,default=0)
     for command in ("demo", "run", "resume", "revise", "report"):
         item = sub.add_parser(command)
         item.add_argument("--output", type=Path)

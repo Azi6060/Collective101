@@ -11,6 +11,7 @@
 <script src="/vendor/marked.umd.js" defer></script>
 <script src="/vendor/purify.min.js" defer></script>
 <script src="/markdown.js" defer></script>
+<script src="/attachments.js" defer></script>
 <script src="/app.js" defer></script>
 </head>
 <body>
@@ -231,9 +232,30 @@
         <time id="chat-progress-time" aria-live="off"></time>
       </div>
       <form id="mission-form" class="composer">
+        <div id="pending-attachments" class="attachment-list" aria-label="Attachments to send"></div>
+        <div id="upload-status" class="attachment-status" role="status" aria-live="polite"></div>
         <label for="mission-input" class="visually-hidden">Message your organization</label>
         <textarea id="mission-input" class="form-control" rows="1" maxlength="12000" placeholder="Message your organization..." required></textarea>
         <div class="composer-actions">
+          <div class="composer-tools">
+            <div class="attachment-chooser">
+              <div id="attachment-menu" class="attachment-menu" role="menu" aria-label="Add attachment" hidden>
+                <button id="attachment-pick-file" type="button" role="menuitem"><strong>File</strong><small>Documents, code or audio</small></button>
+                <button id="attachment-pick-folder" type="button" role="menuitem"><strong>Folder</strong><small>Keep a project's folder structure</small></button>
+                <button id="attachment-pick-photo" type="button" role="menuitem"><strong>Photo</strong><small>JPG, PNG, WebP or GIF</small></button>
+              </div>
+              <button id="attach-files" type="button" class="composer-tool" aria-label="Attach files" title="Add an attachment" aria-haspopup="menu" aria-expanded="false" aria-controls="attachment-menu">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m21 11-9 9a6 6 0 0 1-8-8L14 2a4 4 0 0 1 6 6L10 18a2 2 0 0 1-3-3l9-9"/></svg>
+              </button>
+            </div>
+            <button id="record-voice" type="button" class="composer-tool" aria-label="Record voice message" title="Record a voice message">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg>
+            </button>
+            <button id="cancel-recording" type="button" class="composer-tool" hidden>Cancel recording</button>
+            <input id="attachment-photo" type="file" multiple hidden accept="image/png,image/jpeg,image/webp,image/gif">
+            <input id="attachment-folder" type="file" multiple hidden webkitdirectory directory>
+            <input id="attachment-files" type="file" multiple hidden accept=".txt,.md,.markdown,.csv,.json,.jsonl,.docx,.pdf,.png,.jpg,.jpeg,.webp,.gif,.wav,.mp3,.m4a,.ogg,.webm,.html,.css,.js,.ts,.py,.yaml,.yml,.xml,.log,.sql">
+          </div>
           <span class="composer-hint">Enter to send · Shift + Enter for a new line</span>
           <button id="send-mission" class="btn btn-primary" type="submit" aria-label="Send message">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
@@ -245,6 +267,7 @@
   </div>
 </section>
 
+<dialog id="attachment-lightbox" class="attachment-lightbox" aria-label="Image preview"><button id="close-attachment-preview" type="button" class="workspace-action" aria-label="Close image preview">Close</button><img id="attachment-large-image" alt=""></dialog>
 <dialog id="file-viewer" class="file-viewer">
   <div class="file-viewer-heading">
     <strong id="file-viewer-title"></strong>

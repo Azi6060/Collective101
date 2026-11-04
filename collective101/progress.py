@@ -3,7 +3,7 @@ from .store import now
 
 SCHEMA='''CREATE TABLE IF NOT EXISTS org_progress(
  run_id TEXT PRIMARY KEY,agent_id TEXT,phase TEXT NOT NULL,detail TEXT NOT NULL,updated_at TEXT NOT NULL);'''
-LABELS={'assess':'Assessing the request','coordinate':'Coordinating department contributions',
+LABELS={'help_decision':'Deciding scoped departmental help','help':'Consulting another department head','replan':'Revising the team from new evidence','assess':'Assessing the request','coordinate':'Coordinating department contributions',
  'select':'Selecting the mission team','work':'Working on the assigned task',
  'report':'Gathering department results','review_assignment':'Assigning independent review',
  'review':'Reviewing the evidence','retrospective':'Preparing the result',
