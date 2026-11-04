@@ -1,35 +1,44 @@
 """Reproducible, bounded evaluation runner; real model execution is explicit."""
-import json,time,uuid
+import json,time,uuid,threading
 from pathlib import Path
 from .provider import parse_object,ProviderError
 from .store import encode
 from .sandbox import execute_javascript
 from .html_checks import check_html
 
+class EvaluationBudgetExceeded(RuntimeError):pass
+
 class MeteredProvider:
-    def __init__(self,provider,max_calls=80,max_units=2000000,should_stop=None):
-        if not 1<=max_calls<=160:raise ValueError('Evaluation call cap must be 1 to 160')
+    def __init__(self,provider,max_calls=0,max_units=0,should_stop=None):
+        if type(max_calls) is not int or max_calls<0 or type(max_units) is not int or max_units<0:raise ValueError('Evaluation spending allowances must be nonnegative; zero is unlimited')
         self.provider=provider;self.name=provider.name;self.model=getattr(provider,'model',None);self.url=getattr(provider,'url',None)
         self.max_calls=max_calls;self.max_units=max_units;self.calls=0;self.tokens=0;self.units=0
         self.should_stop=should_stop
+        self.lock=threading.RLock()
     def complete(self,messages,tools=None):
         return self.complete_with_options(messages,self.request_options('work'),tools)
     def request_options(self,phase='work',output_retries=0,transport_retries=0):
         if hasattr(self.provider,'request_options'):return self.provider.request_options(phase,output_retries,transport_retries)
-        return {'max_tokens':4096,'timeout':120,'reasoning_effort':'medium'}
+        return {'max_tokens':4096,'timeout':120,'reasoning_effort':'high'}
     def complete_with_options(self,messages,options,tools=None):
         if self.should_stop and self.should_stop():raise RuntimeError('Evaluation cancelled before the next request')
         charge=len(encode(messages).encode())+options['max_tokens']
-        if self.calls>=self.max_calls or self.units+charge>self.max_units:raise RuntimeError('Evaluation budget exhausted')
-        self.calls+=1;self.units+=charge
+        with self.lock:
+            if (self.max_calls and self.calls>=self.max_calls) or (self.max_units and self.units+charge>self.max_units):
+                error=EvaluationBudgetExceeded('Evaluation budget exhausted');error.meter=self;raise error
+            self.calls+=1;self.units+=charge
         try:
             completion=self.provider.complete_with_options(messages,options,tools) if hasattr(self.provider,'complete_with_options') else self.provider.complete(messages,tools) if tools is not None else self.provider.complete(messages)
-        except ProviderError as error:
-            self.tokens+=error.tokens
+        except EvaluationBudgetExceeded:
+            with self.lock:self.calls-=1;self.units-=charge
             raise
-        self.tokens+=completion.tokens;return completion
+        except ProviderError as error:
+            with self.lock:self.tokens+=error.tokens
+            raise
+        with self.lock:self.tokens+=completion.tokens
+        return completion
 
-def run_evaluation(provider,output_root,max_calls=80):
+def run_evaluation(provider,output_root,max_calls=0):
     from .console import MissionConsole
     from .department_runtime import DepartmentOrganization
     from .org_contracts import mission_contract

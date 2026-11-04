@@ -5,6 +5,8 @@ import re
 import http.client
 import os
 import socket
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -45,29 +47,35 @@ class MetaProvider:
         simulation_timeout=timeout if self.name=='simulation' and type(timeout) in (int,float) and 0<timeout<10 else None
         self.policy = request_policy(max_output_tokens,None if simulation_timeout is not None else timeout,temperature)
         self.timeout = simulation_timeout if simulation_timeout is not None else self.policy['timeout_seconds']
+        self._context_counts={};self._context_lock=threading.RLock()
         self.max_output_tokens = self.policy['max_output_tokens']
 
     def request_options(self,phase='work',output_retries=0,transport_retries=0):
-        base_tokens=4096 if phase=='intake' else 16384 if phase=='work' else 8192
-        base_timeout=min(self.timeout,60 if phase=='intake' else 90) if phase!='work' else self.timeout
+        base_tokens=16384 if phase=='intake' else 65536 if phase=='work' else 32768
+        base_timeout=self.timeout
         return {'max_tokens':min(self.max_output_tokens,base_tokens*(2**min(output_retries,2))),
-                'timeout':min(300,base_timeout*(1+.5*min(transport_retries,2))),
-                'reasoning_effort':'low' if phase=='intake' else 'medium','temperature':self.policy['temperature']}
+                'timeout':min(900,base_timeout*(1+.5*(min(transport_retries,2)+min(output_retries,1)))),
+                'reasoning_effort':'high','temperature':self.policy['temperature']}
 
     def complete(self, messages, tools=None) -> Completion:
         return self.complete_with_options(messages,self.request_options(),tools)
 
     def complete_with_options(self,messages,options,tools=None) -> Completion:
+        if len(json.dumps(messages).encode())>70*1024*1024:raise ValueError('Media request exceeds transport safety bound')
         check_input(messages)
         limit=options['max_tokens'];timeout=options['timeout'];effort=options['reasoning_effort']
         if type(limit) is not int or not 1<=limit<=self.max_output_tokens:
             raise ValueError('Request output limit exceeds configured cap')
         minimum_timeout=.01 if self.name=='simulation' else 1
-        if type(timeout) not in (int,float) or not minimum_timeout<=timeout<=300 or effort not in {'low','medium'}:
+        if type(timeout) not in (int,float) or not minimum_timeout<=timeout<=900 or effort not in {'minimal','low','medium','high','xhigh','max'}:
             raise ValueError('Invalid model request options')
         temperature=options.get('temperature',self.policy['temperature'])
         if type(temperature) not in (int,float) or not 0<=temperature<=2:raise ValueError('Temperature must be between 0 and 2')
+        if check_input(messages)>850000 and self.model.startswith(('muse-spark','muse-wonder')):
+            count=self.measure_input(messages)
+            if count+limit+8192>1048576:raise ProviderError('Request exceeds the model context window after reserving output and prompt margin; split the task or compact older history',kind='context')
         payload = {"model": self.model, "messages": messages, "max_completion_tokens":limit,"reasoning_effort":effort,'temperature':temperature}
+        if not tools:payload.update(stream=True,stream_options={'include_usage':True})
         if tools:
             payload.update(tools=tools, tool_choice="auto", parallel_tool_calls=False)
         elif self.model.startswith('muse-spark'):
@@ -82,8 +90,11 @@ class MetaProvider:
             def redirect_request(self, req, fp, code, msg, headers, newurl):
                 return None
         try:
+            request_started=time.monotonic()
             with urllib.request.build_opener(NoRedirect).open(request, timeout=timeout) as response:
-                data = json.load(response)
+                remaining=timeout-(time.monotonic()-request_started)
+                if remaining<=0:raise ProviderError('Model request exceeded its deadline before response headers',True,kind='timeout')
+                data = self._stream_response(response,remaining) if 'text/event-stream' in str(getattr(response,'headers',{}).get('Content-Type','')) else json.load(response)
         except urllib.error.HTTPError as error:
             raise ProviderError(f"Model endpoint returned HTTP {error.code}", error.code == 429 or error.code >= 500,kind='http') from None
         except (TimeoutError,socket.timeout):
@@ -116,6 +127,90 @@ class MetaProvider:
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             raise ProviderError("Model endpoint response does not match the chat-completions contract",kind='invalid_response',tokens=tokens) from None
 
+    @staticmethod
+    def _stream_response(response,timeout):
+        parts=[];finish=None;usage={};received=0;started=time.monotonic()
+        while True:
+            remaining=timeout-(time.monotonic()-started)
+            if remaining<=0:raise ProviderError('Model stream exceeded its total request deadline',True,kind='timeout',tokens=usage.get('total_tokens',0))
+            # urllib's HTTPResponse exposes the connected socket through its raw
+            # reader. Reduce idle waits as the absolute deadline approaches; test
+            # streams and alternate readers may have no socket.
+            connection=getattr(getattr(getattr(response,'fp',None),'raw',None),'_sock',None)
+            if connection is not None:connection.settimeout(remaining)
+            line=response.readline(1024*1024)
+            if time.monotonic()-started>=timeout:raise ProviderError('Model stream exceeded its total request deadline',True,kind='timeout',tokens=usage.get('total_tokens',0))
+            if not line:break
+            received+=len(line)
+            if received>16*1024*1024 or len(line)>=1024*1024:raise ProviderError('Model stream exceeded response transport bounds',kind='invalid_response',tokens=usage.get('total_tokens',0))
+            if not line.startswith(b'data:'):continue
+            payload=line[5:].strip()
+            if payload==b'[DONE]':break
+            try:event=json.loads(payload)
+            except (ValueError,UnicodeError):raise ProviderError('Model stream returned malformed event JSON',kind='invalid_response',tokens=usage.get('total_tokens',0)) from None
+            if not isinstance(event,dict):raise ProviderError('Invalid model stream event',kind='invalid_response')
+            if isinstance(event.get('usage'),dict):usage=event['usage']
+            for choice in event.get('choices',[]):
+                if choice.get('index',0)!=0:continue
+                delta=choice.get('delta',{})
+                if delta.get('refusal'):raise ProviderError('The model declined this request',kind='refusal',tokens=usage.get('total_tokens',0))
+                if isinstance(delta.get('content'),str):parts.append(delta['content'])
+                if choice.get('finish_reason') is not None:finish=choice['finish_reason']
+        # Streaming is transport only. Never expose partial text or private reasoning.
+        if finish not in {'stop','length'}:raise ProviderError('Model stream ended without a completed result; partial output rejected',True,kind='connection',tokens=usage.get('total_tokens',0))
+        return {'choices':[{'message':{'role':'assistant','content':''.join(parts)},'finish_reason':finish}],'usage':usage}
+
+    def measure_input(self,messages):
+        """Meta tokenizes a Responses representation; leave margin for format differences."""
+        key=hashlib.sha256(json.dumps(messages,ensure_ascii=False).encode()).hexdigest()
+        with self._context_lock:
+            if key in self._context_counts:return self._context_counts[key]
+        content=[]
+        for message in messages:
+            if message['role'] not in {'system','developer','user','assistant'}:raise ProviderError('Large legacy tool history needs explicit migration before token measurement',kind='context')
+            parts=message['content']
+            if isinstance(parts,list):
+                converted=[]
+                for part in parts:
+                    kind=part.get('type')
+                    if kind=='text':converted.append({'type':'input_text','text':part['text']})
+                    elif kind=='image_url':converted.append({'type':'input_image','image_url':part['image_url']['url']})
+                    elif kind=='file':converted.append({'type':'input_file',**part['file']})
+                    elif kind=='input_audio':converted.append(part)
+                    else:raise ProviderError('Unsupported context measurement content type',kind='context')
+                parts=converted
+            content.append({'role':message['role'],'content':parts})
+        request=urllib.request.Request(self.url.removesuffix('/chat/completions')+'/responses/input_tokens',data=json.dumps({'model':self.model,'input':content}).encode(),headers={'Authorization':'Bearer '+self.key,'Content-Type':'application/json'})
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self,*args,**kwargs):return None
+        try:
+            with urllib.request.build_opener(NoRedirect).open(request,timeout=self.timeout) as response:value=json.load(response)
+        except urllib.error.HTTPError as e:raise ProviderError(f'Context token measurement returned HTTP {e.code}; no generation was sent',kind='context') from None
+        except (OSError,ValueError,UnicodeError):raise ProviderError('Could not measure large request context; no generation was sent',kind='context') from None
+        count=value.get('input_tokens') if isinstance(value,dict) else None
+        if type(count) is not int or count<0:raise ProviderError('Invalid provider context-token count; no generation was sent',kind='context')
+        with self._context_lock:
+            if len(self._context_counts)>=8:self._context_counts.pop(next(iter(self._context_counts)))
+            self._context_counts[key]=count
+        return count
+
+    def transcribe(self,audio):
+        boundary='collective101-'+hashlib.sha256(audio).hexdigest()[:24]
+        settings=json.dumps({'mode':'PUSH_TO_TALK','model':'muse-voice-transcribe-1.0','audioEncoding':'WAV'})
+        body=(f'--{boundary}\r\nContent-Disposition: form-data; name="request"\r\nContent-Type: application/json\r\n\r\n{settings}\r\n--{boundary}\r\nContent-Disposition: form-data; name="audio"; filename="recording.wav"\r\nContent-Type: audio/wav\r\n\r\n').encode()+audio+f'\r\n--{boundary}--\r\n'.encode()
+        request=urllib.request.Request(self.url.removesuffix('/chat/completions')+'/asr/transcribe?sessionId='+boundary,data=body,headers={'Authorization':'Bearer '+self.key,'Content-Type':'multipart/form-data; boundary='+boundary})
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self,*args,**kwargs):return None
+        try:
+            with urllib.request.build_opener(NoRedirect).open(request,timeout=self.timeout) as response:result=json.load(response)
+        except urllib.error.HTTPError as e:raise ProviderError(f'Voice transcription endpoint returned HTTP {e.code}; check model access and WAV format',e.code==429 or e.code>=500,kind='http') from None
+        except (TimeoutError,socket.timeout):raise ProviderError('Voice transcription timed out',True,kind='timeout') from None
+        except (urllib.error.URLError,ConnectionError):raise ProviderError('Voice transcription connection failed',True,kind='connection') from None
+        except (ValueError,UnicodeError):raise ProviderError('Voice transcription returned invalid JSON',kind='invalid_response') from None
+        transcript=result.get('transcript') if isinstance(result,dict) else None
+        if not isinstance(transcript,str) or not transcript.strip():raise ProviderError('No speech was transcribed; record a clearer message',kind='empty_output')
+        return transcript
+
 
 def request_policy(max_output_tokens=None,timeout_seconds=None,temperature=None):
     """Operator settings, never model-controlled; values are not echoed on errors."""
@@ -133,8 +228,8 @@ def request_policy(max_output_tokens=None,timeout_seconds=None,temperature=None)
         try:temperature=float(os.environ.get('MODEL_TEMPERATURE') or '1')
         except (ValueError,TypeError):raise ValueError('MODEL_TEMPERATURE must be between 0 and 2') from None
     if type(temperature) not in (float,int) or not 0<=temperature<=2:raise ValueError('MODEL_TEMPERATURE must be between 0 and 2')
-    return {'max_output_tokens':setting(max_output_tokens,'MODEL_MAX_OUTPUT_TOKENS',32768,1024,32768),
-            'timeout_seconds':setting(timeout_seconds,'MODEL_REQUEST_TIMEOUT_SECONDS',120,10,300),'temperature':temperature}
+    return {'max_output_tokens':setting(max_output_tokens,'MODEL_MAX_OUTPUT_TOKENS',131072,1024,131072),
+            'timeout_seconds':setting(timeout_seconds,'MODEL_REQUEST_TIMEOUT_SECONDS',600,10,900),'temperature':temperature,'reasoning_effort':'high'}
 
 
 class StructuredOutputError(ValueError):

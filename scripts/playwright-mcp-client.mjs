@@ -2,6 +2,7 @@
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import {mkdir,writeFile} from 'node:fs/promises';
 export const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 export const resultText=result=>result.content.filter(c=>c.type==='text').map(c=>c.text).join('\n');
 export async function inspect(browser,fn) {
@@ -26,9 +27,16 @@ export async function connectBrowser(origin='http://127.0.0.1:8765',options={}) 
   if(url.protocol!=='http:'||!['127.0.0.1','localhost'].includes(url.hostname))throw new Error('Browser test target must be this local workspace');
   if(options.allowLoopbackPreviews&&process.env.COLLECTIVE101_ISOLATED_TEST!=='1')throw new Error('Dynamic preview ports are allowed only in the isolated test harness');
   const env=Object.fromEntries(['PATH','SYSTEMROOT','WINDIR','TEMP','TMP','LOCALAPPDATA'].filter(k=>process.env[k]).map(k=>[k,process.env[k]]));
+  const extra=[];
+  if(options.fakeMicrophone){
+    if(process.env.COLLECTIVE101_ISOLATED_TEST!=='1')throw new Error('Fake microphone is restricted to disposable browser tests');
+    const config=path.join(root,'work/playwright/fake-microphone.json');await mkdir(path.dirname(config),{recursive:true});
+    await writeFile(config,JSON.stringify({browser:{launchOptions:{args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']},contextOptions:{permissions:['microphone']}}}));
+    extra.push('--config',config);
+  }
   const transport=new StdioClientTransport({command:process.execPath,cwd:root,env,stderr:'pipe',args:[
     path.join(root,'node_modules/@playwright/mcp/cli.js'),'--browser','chrome','--headless','--isolated','--sandbox',
-    '--block-service-workers','--no-webmcp','--ignore-roots','--allowed-origins',options.allowLoopbackPreviews?url.origin+';http://127.0.0.1:*':url.origin,
+    ...extra,'--block-service-workers','--no-webmcp','--ignore-roots','--allowed-origins',options.allowLoopbackPreviews?url.origin+';http://127.0.0.1:*':url.origin,
     '--output-dir',path.join(root,'work/playwright'),'--viewport-size','1440x1000']});
   let stderr='';transport.stderr?.on('data',chunk=>{stderr=(stderr+chunk.toString()).slice(-4000);});
   const client=new Client({name:'collective101-browser-testing',version:'1.0.0'},{capabilities:{}});

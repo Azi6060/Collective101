@@ -10,6 +10,7 @@
 <script src="/vendor/marked.umd.js" defer></script>
 <script src="/vendor/purify.min.js" defer></script>
 <script src="/markdown.js" defer></script>
+<script src="/attachments.js" defer></script>
 <script src="/app.js" defer></script>
 </head>
 <body>
@@ -65,7 +66,7 @@
       </span>
       Connectors
     </a>
-    <a href="/evaluations" data-nav="evaluations" class="nav-link"><span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16M7 16V9m5 7V4m5 12v-5"/></svg></span>Effectiveness</a>
+
     <a href="/activity" data-nav="activity" class="nav-link">
       <span class="nav-icon" aria-hidden="true">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
@@ -320,14 +321,11 @@
           <div id="workspace-events" class="workspace-muted">No actions yet.</div>
         </div>
         <details class="workspace-section">
-          <summary>Plan and limits</summary>
+          <summary>Plan and execution</summary>
           <div id="brief-title" class="mini-label"></div>
           <div id="brief-content"></div>
           <div id="chat-limits-info"></div>
-          <div class="row g-2 mt-2">
-            <label class="col-6" for="budget-calls">Call cap<input id="budget-calls" class="form-control" type="number" min="1" max="160" value="160" required form="mission-form"></label>
-            <label class="col-6" for="budget-tokens">Admission units<input id="budget-tokens" class="form-control" type="number" min="4096" max="10000000" value="10000000" required form="mission-form"></label>
-          </div>
+
         </details>
         <details id="workspace-failure-details" class="workspace-section">
           <summary>Failure details</summary>
@@ -352,10 +350,14 @@
         <span id="chat-progress-label"></span>
         <time id="chat-progress-time" aria-live="off"></time>
       </div>
+      <div id="agent-chat-context" class="agent-chat-context" hidden><span id="agent-chat-name"></span><span class="agent-chat-note">A conversation with this specialist</span><button id="organization-chat" type="button" class="workspace-action">Ask the organization</button></div>
       <form id="mission-form" class="composer">
+        <div id="pending-attachments" class="attachment-list" aria-label="Attachments to send"></div>
+        <div id="upload-status" class="attachment-status" role="status" aria-live="polite"></div>
         <label for="mission-input" class="visually-hidden">Message your organization</label>
-        <textarea id="mission-input" class="form-control" rows="1" maxlength="12000" placeholder="Message your organization..." required></textarea>
+        <textarea id="mission-input" class="form-control" rows="1" maxlength="500000" placeholder="Message your organization..."></textarea>
         <div class="composer-actions">
+          <div class="composer-tools"><div class="attachment-chooser"><div id="attachment-menu" class="attachment-menu" role="menu" aria-label="Add attachment" hidden><button id="attachment-pick-file" type="button" role="menuitem"><strong>File</strong><small>Documents, code or audio</small></button><button id="attachment-pick-folder" type="button" role="menuitem"><strong>Folder</strong><small>Keep a project's folder structure</small></button><button id="attachment-pick-photo" type="button" role="menuitem"><strong>Photo</strong><small>JPG, PNG, WebP or GIF</small></button></div><button id="attach-files" type="button" class="composer-tool" aria-label="Attach files" title="Add an attachment" aria-haspopup="menu" aria-expanded="false" aria-controls="attachment-menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m21 11-9 9a6 6 0 0 1-8-8L14 2a4 4 0 0 1 6 6L10 18a2 2 0 0 1-3-3l9-9"/></svg></button></div><button id="record-voice" type="button" class="composer-tool" aria-label="Record voice message" title="Record a voice message"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg></button><button id="cancel-recording" type="button" class="composer-tool" hidden>Cancel recording</button><input id="attachment-photo" type="file" multiple hidden accept="image/png,image/jpeg,image/webp,image/gif"><input id="attachment-folder" type="file" multiple hidden webkitdirectory directory><input id="attachment-files" type="file" multiple hidden accept=".txt,.md,.markdown,.csv,.json,.jsonl,.docx,.pdf,.png,.jpg,.jpeg,.webp,.gif,.wav,.mp3,.m4a,.ogg,.webm,.html,.css,.js,.ts,.py,.yaml,.yml,.xml,.log,.sql"></div>
           <span class="composer-hint">Enter to send · Shift + Enter for a new line</span>
           <button id="send-mission" class="btn btn-primary" type="submit" aria-label="Send message">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
@@ -367,6 +369,7 @@
   </div>
 </section>
 
+<dialog id="attachment-lightbox" class="attachment-lightbox" aria-label="Image preview"><button id="close-attachment-preview" type="button" class="workspace-action" aria-label="Close image preview">Close</button><img id="attachment-large-image" alt=""></dialog>
 <dialog id="file-viewer" class="file-viewer">
   <div class="file-viewer-heading">
     <strong id="file-viewer-title"></strong>
@@ -429,12 +432,12 @@
       <details id="connector-model-limits" class="mb-3">
         <summary>Model request limits</summary>
         <div class="row g-3 mt-1">
-          <div class="col-md-6"><label class="form-label" for="connector-max-output">Generation token cap</label><input id="connector-max-output" class="form-control" type="number" min="1024" max="32768" step="1" placeholder="32768"></div>
-          <div class="col-md-6"><label class="form-label" for="connector-timeout">Work request timeout (seconds)</label><input id="connector-timeout" class="form-control" type="number" min="10" max="300" step="1" placeholder="120"></div>
+          <div class="col-md-6"><label class="form-label" for="connector-max-output">Generation allowance per request</label><input id="connector-max-output" class="form-control" type="number" min="1024" max="131072" step="1" placeholder="131072"></div>
+          <div class="col-md-6"><label class="form-label" for="connector-timeout">Work request timeout (seconds)</label><input id="connector-timeout" class="form-control" type="number" min="10" max="900" step="1" placeholder="600"></div>
         </div>
         <label class="form-label mt-3" for="connector-temperature">Temperature (optional, 0–2)</label>
         <input id="connector-temperature" class="form-control" type="number" min="0" max="2" step="0.1" placeholder="1.0">
-        <p class="small text-secondary mt-2">Includes reasoning tokens. Leave blank to use server environment settings or defaults. Retries stay within shared mission budgets; connection retries may extend the timeout up to 300 seconds.</p>
+        <p class="small text-secondary mt-2">Includes reasoning tokens. Leave blank to use server environment settings or defaults. Retries stay within shared mission budgets; connection retries may extend the timeout up to 900 seconds.</p>
       </details>
       <label id="connector-local-field" class="d-none mb-3"><input id="connector-local" type="checkbox"> Allow an explicitly configured localhost MCP server</label>
       <p id="connector-kind-help" class="small text-secondary"></p>
@@ -486,20 +489,7 @@
 </section>
 
 <footer>COLLECTIVE 101 <span>Clarity in the work. Evidence in the result.</span></footer>
-<section id="view-evaluations" class="view d-none" aria-labelledby="evaluations-heading">
-  <div class="section-heading"><div><span class="eyebrow">MEASURED WORK</span><h1 id="evaluations-heading">Effectiveness</h1><p class="text-secondary">Judge agents by the work they can demonstrate. A role is not a score.</p></div></div>
-  <div id="evaluation-notice" class="alert alert-light" role="status">Loading evaluation evidence…</div>
-  <div class="evaluation-layout"><div class="evaluation-main">
-    <section class="panel"><div class="evaluation-heading"><h2>Agent scorecards</h2><label class="visually-hidden" for="evaluation-search">Search agents</label><input id="evaluation-search" class="form-control" type="search" placeholder="Find an agent or department"></div><p class="small text-secondary">Scores apply to the recorded model, role version and benchmark cases. Unreviewed work and fixtures never establish effectiveness.</p><details class="small text-secondary mb-3"><summary>How scores are decided</summary><p id="evaluation-policy" class="mt-2"></p></details><div class="evaluation-table-wrap"><table class="table align-middle"><thead><tr><th scope="col">Agent</th><th scope="col">Evidence</th><th scope="col">Verdict</th></tr></thead><tbody id="evaluation-agents"></tbody></table></div></section>
-    <section class="panel mt-4"><div class="evaluation-heading"><h2>Evaluation runs</h2><button id="refresh-evaluations" class="btn btn-outline-secondary btn-sm" type="button">Refresh</button></div><div id="evaluation-runs"></div><div id="evaluation-detail" class="mt-3"></div></section>
-    <section class="panel mt-4" id="memory-panel"><h2>Reviewed memory &amp; improvement</h2><p class="text-secondary small">Compare memory on and off using the same cases. Improvements require held-out evidence; model weights are unchanged.</p><div id="memory-evidence"></div><details><summary>Propose a lesson from recorded work</summary><form id="lesson-form" class="mt-3"><label for="lesson-run" class="form-label">Source run ID from Activity</label><input id="lesson-run" class="form-control" required maxlength="80"><label for="lesson-agent" class="form-label mt-2">Agent ID that produced the evidence</label><input id="lesson-agent" class="form-control" required maxlength="80"><label for="lesson-situation" class="form-label mt-2">Situation</label><textarea id="lesson-situation" class="form-control" required maxlength="2000" rows="2"></textarea><label for="lesson-action" class="form-label mt-2">Action or proposed playbook</label><textarea id="lesson-action" class="form-control" required maxlength="2000" rows="2"></textarea><label for="lesson-outcome" class="form-label mt-2">Observed outcome</label><textarea id="lesson-outcome" class="form-control" required maxlength="2000" rows="2"></textarea><label for="lesson-limitations" class="form-label mt-2">Limitations</label><textarea id="lesson-limitations" class="form-control" required maxlength="2000" rows="2"></textarea><button type="submit" class="btn btn-outline-secondary mt-3">Save for review</button></form></details></section>
-  </div><aside class="panel evaluation-controls" aria-labelledby="evaluation-run-heading"><h2 id="evaluation-run-heading">Run a benchmark</h2><p class="small text-secondary">Live runs use model credits in disposable evaluation state. Existing chats are not replayed.</p>
-    <form id="evaluation-form"><fieldset><legend>Cases and success criteria</legend><div id="evaluation-cases"></div></fieldset>
-    <fieldset class="mt-3"><legend>Compare</legend><label class="evaluation-check"><input type="checkbox" name="evaluation-mode" value="specialist" checked> Role specialist</label><label class="evaluation-check"><input type="checkbox" name="evaluation-mode" value="generalist"> Generalist</label><label class="evaluation-check"><input type="checkbox" name="evaluation-mode" value="organization"> Departmental team (addition case only)</label><label class="evaluation-check"><input type="checkbox" name="evaluation-mode" value="memory_off"> Memory off</label><label class="evaluation-check"><input type="checkbox" name="evaluation-mode" value="memory_on"> Memory on</label></fieldset>
-    <div class="row g-2 mt-2"><div class="col-6"><label for="evaluation-trials" class="form-label">Trials per case</label><input id="evaluation-trials" type="number" min="1" max="3" value="1" class="form-control" required></div><div class="col-6"><label for="evaluation-calls" class="form-label">API call cap</label><input id="evaluation-calls" type="number" min="1" max="160" value="80" class="form-control" required></div></div>
-    <label class="evaluation-check mt-3"><input id="evaluation-confirm" type="checkbox" required> I understand this uses live API credits.</label><p id="evaluation-model" class="small text-secondary"></p><button id="start-evaluation" class="btn btn-primary w-100 mt-2" type="submit">Run live evaluation</button></form>
-  </aside></div>
-</section>
+
 </main>
 </div>
 </div>

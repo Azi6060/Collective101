@@ -5,7 +5,7 @@ import {JSDOM,VirtualConsole} from 'jsdom';
 const base=process.env.COLLECTIVE101_TEST_URL;
 if(!base)throw new Error('Run npm.cmd run test:ui to use the isolated test service.');
 const html=await readFile(new URL('../collective101/web/index.html',import.meta.url),'utf8');
-const script=await readFile(new URL('../collective101/web/app.js',import.meta.url),'utf8');
+const script=(await readFile(new URL('../collective101/web/attachments.js',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../collective101/web/app.js',import.meta.url),'utf8'));
 const markdownScripts=await Promise.all(['vendor/marked.umd.js','vendor/purify.min.js','markdown.js'].map(file=>readFile(new URL('../collective101/web/'+file,import.meta.url),'utf8')));
 async function waitFor(predicate,timeout=25000){const end=Date.now()+timeout;while(Date.now()<end){if(await predicate())return;await new Promise(resolve=>setTimeout(resolve,70));}throw new Error('Timed out waiting for UI state');}
 async function setup(healthOverride=null){
@@ -59,17 +59,12 @@ test('Markdown file opens in Preview with an exact Source tab and no fingerprint
   }finally{app.dom.window.close();}
 });
 
-test('chat budget uses the raised allowance and respects a lower running-server ceiling',async()=>{
-  const current=await setup();try{
-    assert.equal(current.doc.getElementById('budget-tokens').value,'10000000');
-    assert.equal(current.doc.getElementById('budget-tokens').max,'10000000');
-  }finally{current.dom.window.close();}
-  const session=await (await fetch(base+'/api/session')).json();
-  const health=await (await fetch(base+'/api/health',{headers:{'X-Console-Token':session.token}})).json();
-  const older=await setup({limits:{...health.limits,max_admission_units_per_chat:2000000}});try{
-    assert.equal(older.doc.getElementById('budget-tokens').value,'2000000');
-    assert.equal(older.doc.getElementById('budget-tokens').max,'2000000');
-  }finally{older.dom.window.close();}
+test('spending controls are removed from chat and benchmarks',async()=>{
+  const app=await setup();try{
+    for(const id of ['budget-calls','budget-tokens','evaluation-calls'])assert.equal(app.doc.getElementById(id),null);
+    assert.equal(app.doc.getElementById('evaluation-trials'),null);
+    assert.deepEqual(app.errors,[]);
+  }finally{app.dom.window.close();}
 });
 
 test('old server requires restart and cannot receive new chat requests through the updated UI',async()=>{
@@ -124,43 +119,22 @@ test('directory exposes departments, roles, reporting lines and per-agent activi
     const search=app.doc.getElementById('agent-search');search.value='operations';search.dispatchEvent(new app.win.Event('input'));
     assert.equal(app.doc.querySelectorAll('#search-results .agent-row').length,8);
     app.doc.querySelector('#search-results button').click();
-    assert.match(app.doc.getElementById('agent-inspector').textContent,/Reports to: Mission Director/);
+    assert.match(app.doc.getElementById('agent-inspector').textContent,/Works with Mission Director/);
     assert.equal(app.doc.querySelectorAll('#activity-agent option').length,102);
     assert.deepEqual(app.errors,[]);
   }finally{app.dom.window.close();}
 });
 
-test('Effectiveness exposes honest scorecards and versioned role cases without starting paid work',async()=>{
+test('Effectiveness is removed from navigation and page while developer evidence remains available',async()=>{
   const app=await setup();try{
-    app.doc.querySelector('[data-nav="evaluations"]').click();
-    await waitFor(()=>app.doc.querySelectorAll('#evaluation-agents tr').length===101);
-    assert.ok(app.doc.querySelectorAll('[name="evaluation-case"]').length>=22);
-    assert.match(app.doc.getElementById('evaluation-policy').textContent,/80%/);
-    assert.match(app.doc.getElementById('evaluation-notice').textContent,/Fixtures never count/);
-    assert.equal(app.doc.getElementById('start-evaluation').disabled,true);
-    await waitFor(()=>app.doc.getElementById('memory-evidence').textContent.includes('frozen snapshot'));
-    assert.match(app.doc.getElementById('memory-evidence').textContent,/frozen snapshot/);
-    const search=app.doc.getElementById('evaluation-search');search.value='engineering-001';search.dispatchEvent(new app.win.Event('input'));
-    assert.equal(app.doc.querySelectorAll('#evaluation-agents tr').length,1);
-    assert.match(app.doc.getElementById('evaluation-agents').textContent,/untested/);
-    assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
+    assert.equal(app.doc.querySelector('[data-nav="evaluations"]'),null);
+    assert.equal(app.doc.getElementById('view-evaluations'),null);
+    const session=await (await fetch(base+'/api/session')).json();
+    const evidence=await fetch(base+'/api/evaluations',{headers:{'X-Console-Token':session.token}});
+    assert.equal(evidence.status,200);assert.equal((await evidence.json()).agents.length,101);
+  }finally{app.win.close();}
 });
 
-test('confirmed evaluation uses only injected test provider and its fixtures cannot promote effectiveness',async()=>{
-  const app=await setup({live_configured:true});try{
-    app.doc.querySelector('[data-nav="evaluations"]').click();
-    await waitFor(()=>app.doc.querySelector('[name="evaluation-case"][value="intake-greeting"]'));
-    app.doc.querySelector('[name="evaluation-case"][value="intake-greeting"]').checked=true;
-    app.doc.getElementById('evaluation-calls').value='10';app.doc.getElementById('evaluation-confirm').checked=true;
-    submit(app.win,app.doc.getElementById('evaluation-form'));
-    await waitFor(async()=>{await app.poll();return app.doc.getElementById('evaluation-detail').textContent.includes('Passed');});
-    assert.match(app.doc.getElementById('evaluation-detail').textContent,/fixture/);
-    assert.equal(app.doc.getElementById('evaluation-confirm').checked,false);
-    assert.equal(app.doc.querySelectorAll('#evaluation-agents .meets_benchmark').length,0);
-    assert.deepEqual(app.errors,[]);
-  }finally{app.dom.window.close();}
-});
 test('short mission asks questions and answers continue to a recorded result',async()=>{
   const app=await setup();try{
     app.doc.querySelector('.new-mission').click();
@@ -246,13 +220,13 @@ test('greeting uses injected live-provider response and agent inspector shows sc
     app.doc.querySelector('.new-mission').click();
     app.doc.getElementById('mission-input').value='Hi!';submit(app.win,app.doc.getElementById('mission-form'));
     await waitFor(async()=>{await app.poll();return app.doc.getElementById('chat-status').textContent==='answered';});
-    assert.match(app.doc.getElementById('brief-content').textContent,/1 \/ 160 total provider requests/);
+    assert.match(app.doc.getElementById('brief-content').textContent,/1 total provider requests/);
     assert.equal(app.doc.getElementById('mission-controls').classList.contains('d-none'),true);
     app.doc.querySelector('[data-nav="organization"]').click();
     const search=app.doc.getElementById('agent-search');search.value='research-003';search.dispatchEvent(new app.win.Event('input'));
     app.doc.querySelector('#search-results button').click();
-    assert.match(app.doc.getElementById('agent-inspector').textContent,/web_search/);
-    assert.match(app.doc.getElementById('agent-inspector').textContent,/own reviewed episodes/);
+    assert.match(app.doc.getElementById('agent-inspector').textContent,/Chat with Source Analyst/);
+    assert.equal(app.doc.getElementById('agent-inspector').querySelector('pre'),null);
     assert.deepEqual(app.errors,[]);
   }finally{app.dom.window.close();}
 });
@@ -333,4 +307,38 @@ test('chat composer grows without manual resizing and runtime status stays outsi
     assert.equal(app.doc.getElementById('chat-progress').classList.contains('d-none'),true);
     assert.equal(app.doc.getElementById('send-mission').disabled,false);assert.deepEqual(app.errors,[]);
   }finally{app.dom.window.close();}
+});
+
+
+test('direct agent chat preserves identity, role boundary and can hand off to organization',async()=>{
+  const app=await setup();try{
+    app.doc.querySelector('[data-nav="organization"]').click();
+    const search=app.doc.getElementById('agent-search');search.value='Recovery Planner';search.dispatchEvent(new app.win.Event('input'));
+    app.doc.querySelector('#search-results button').click();
+    const panel=app.doc.getElementById('agent-inspector');assert.equal(panel.querySelector('pre'),null);
+    [...panel.querySelectorAll('button')].find(b=>b.textContent.startsWith('Chat with')).click();
+    assert.equal(app.doc.getElementById('agent-chat-context').hidden,false);
+    assert.match(app.doc.getElementById('agent-chat-name').textContent,/Recovery Planner/);
+    app.doc.getElementById('mission-input').value='Build me a website';submit(app.win,app.doc.getElementById('mission-form'));
+    await waitFor(async()=>{await app.poll();return app.doc.getElementById('chat-status').textContent==='answered';});
+    assert.match(app.doc.querySelector('.message.assistant .message-label').textContent,/Recovery Planner/);
+    assert.match(app.doc.querySelector('.message.assistant .markdown-body').textContent,/Engineering/);
+    app.doc.getElementById('organization-chat').click();assert.equal(app.doc.getElementById('agent-chat-context').hidden,true);
+    assert.equal(app.doc.getElementById('mission-input').value,'Build me a website');assert.deepEqual(app.errors,[]);
+  }finally{app.win.close();}
+});
+
+test('file upload attaches a document to the actual sent message without injecting source HTML',async()=>{
+  const app=await setup();try{
+    const input=app.doc.getElementById('attachment-files');
+    Object.defineProperty(input,'files',{value:[new app.win.File(['Brand: GreenBasket <script>bad()</script>'],'brief.md',{type:'text/plain'})],configurable:true});
+    input.dispatchEvent(new app.win.Event('change'));
+    await waitFor(()=>app.doc.querySelector('#pending-attachments .attachment-chip'));
+    assert.match(app.doc.getElementById('pending-attachments').textContent,/brief.md/);
+    app.doc.getElementById('mission-input').value='Hi';submit(app.win,app.doc.getElementById('mission-form'));
+    await waitFor(async()=>{await app.poll();return app.doc.getElementById('chat-status').textContent==='answered';});
+    assert.match(app.doc.querySelector('.message.user .sent-attachments').textContent,/brief.md/);
+    assert.equal(app.doc.querySelectorAll('#pending-attachments .attachment-chip').length,0);
+    assert.equal(app.doc.querySelector('#chat-messages script'),null);assert.deepEqual(app.errors,[]);
+  }finally{app.win.close();}
 });

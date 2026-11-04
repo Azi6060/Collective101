@@ -7,7 +7,27 @@ SCHEMA='''CREATE TABLE IF NOT EXISTS org_repairs(
  PRIMARY KEY(root_id,round));'''
 
 def run_ids(store,root):
-    return [root]+[r['run_id'] for r in store.query('SELECT run_id FROM org_repairs WHERE root_id=? ORDER BY round',(root,))]
+    # Walk both immutable repair and mid-mission revision edges in causal order.
+    found=[]
+    def visit(rid):
+        if rid in found:raise ValueError('Revision history contains a cycle')
+        found.append(rid)
+        edges=[(r['created_at'],r['run_id']) for r in store.query('SELECT run_id,created_at FROM org_repairs WHERE root_id=? ORDER BY round',(rid,))]
+        if store.query("SELECT name FROM sqlite_master WHERE name='org_plan_revisions'"):
+            edges += [(r['created_at'],r['run_id']) for r in store.query('SELECT run_id,created_at FROM org_plan_revisions WHERE parent_id=? ORDER BY round',(rid,))]
+        for _,child in sorted(edges):visit(child)
+    visit(root);return found
+
+def pause_requested(store,run_id):
+    ancestors={run_id};queue=[run_id]
+    while queue:
+        rid=queue.pop()
+        parents=[r['root_id'] for r in store.query('SELECT root_id FROM org_repairs WHERE run_id=?',(rid,))]
+        if store.query("SELECT name FROM sqlite_master WHERE name='org_plan_revisions'"):parents += [r['parent_id'] for r in store.query('SELECT parent_id FROM org_plan_revisions WHERE run_id=?',(rid,))]
+        for parent in parents:
+            if parent not in ancestors:ancestors.add(parent);queue.append(parent)
+    slots=','.join('?' for _ in ancestors)
+    return bool(store.query('SELECT run_id FROM org_controls WHERE pause_requested=1 AND run_id IN ('+slots+')',tuple(ancestors)))
 
 def feedback(store,run):
     result=run['result']

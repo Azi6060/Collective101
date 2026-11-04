@@ -27,7 +27,7 @@ def make_server(state,port=8765,console=None):
             self.send_header('Content-Length',str(len(body)))
             self.send_header('Cache-Control','no-store')
             self.send_header('X-Content-Type-Options','nosniff')
-            self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+            self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; media-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
             self.send_header('Referrer-Policy','no-referrer')
             for key,value in (headers or {}).items():self.send_header(key,value)
             self.end_headers()
@@ -58,6 +58,9 @@ def make_server(state,port=8765,console=None):
                         from .knowledge import documents
                         result=documents()
                     elif path=='/api/organization': result=service.roster()
+                    elif path.startswith('/api/attachments/'):
+                        row=service.attachments.get(path.removeprefix('/api/attachments/'))
+                        return self.send(200,row['body'], 'application/octet-stream',{'Content-Disposition':'attachment; filename="download"'})
                     elif path=='/api/chats': result=service.list_chats()
                     elif path.startswith('/api/chats/') and path.endswith('/artifacts.zip'):
                         cid=path.removeprefix('/api/chats/').removesuffix('/artifacts.zip')
@@ -69,8 +72,8 @@ def make_server(state,port=8765,console=None):
                     else: return self.send(404,{'error':'Not found'})
                     return self.send(200,result)
                 except ValueError as error: return self.send(404,{'error':str(error)})
-            files={'/':'index.html','/chat':'index.html','/organization':'index.html','/activity':'index.html','/connectors':'index.html','/evaluations':'index.html',
-                   '/app.css':'app.css','/app.js':'app.js','/markdown.js':'markdown.js','/vendor/marked.umd.js':'vendor/marked.umd.js',
+            files={'/':'index.html','/chat':'index.html','/organization':'index.html','/activity':'index.html','/connectors':'index.html',
+                   '/app.css':'app.css','/app.js':'app.js','/attachments.js':'attachments.js','/markdown.js':'markdown.js','/vendor/marked.umd.js':'vendor/marked.umd.js',
                    '/vendor/purify.min.js':'vendor/purify.min.js','/vendor/bootstrap.min.css':'vendor/bootstrap.min.css'}
             if path not in files: return self.send(404,{'error':'Not found'})
             target=WEB/files[path]
@@ -82,13 +85,14 @@ def make_server(state,port=8765,console=None):
             try:
                 if self.headers.get('Content-Type','').split(';')[0]!='application/json': raise ValueError('Use application/json')
                 size=int(self.headers.get('Content-Length','0'))
-                limit=300000 if self.path=='/api/knowledge' else 64000
+                limit=36*1024*1024 if self.path=='/api/attachments' else 4000000 if '/chats' in self.path else 300000 if self.path=='/api/knowledge' else 64000
                 if not 0<size<=limit: raise ValueError('Request exceeds bounds')
                 payload=json.loads(self.rfile.read(size))
                 if not isinstance(payload,dict): raise ValueError('Request must be an object')
                 path=urlsplit(self.path).path
                 if path=='/api/chats':
-                    result=service.submit(payload.get('message'),payload.get('mode','meta'),payload.get('request_id'),payload.get('max_calls',160),payload.get('max_tokens',budgets.MAX_ADMISSION_UNITS),payload.get('allow_web',False))
+                    result=service.submit(payload.get('message'),payload.get('mode','meta'),payload.get('request_id'),payload.get('max_calls',0),payload.get('max_tokens',0),payload.get('allow_web',False),payload.get('attachments'),payload.get('agent_id'))
+                elif path=='/api/attachments':result=service.upload_attachment(payload)
                 elif path=='/api/evaluations':result=service.evaluations.start(payload)
                 elif path=='/api/lessons':result=service.evaluations.propose_lesson(payload)
                 elif path.startswith('/api/lessons/') and path.endswith('/review'):
@@ -103,6 +107,10 @@ def make_server(state,port=8765,console=None):
                 elif path=='/api/knowledge':
                     from .knowledge import ingest
                     result=ingest(payload.get('filename'),payload.get('content'))
+                elif path.startswith('/api/attachments/') and path.endswith('/remove'):
+                    aid=path.removeprefix('/api/attachments/').removesuffix('/remove');row=service.attachments.get(aid)
+                    if row['chat_id']:raise ValueError('Sent attachments belong to their saved chat')
+                    service.store.execute('DELETE FROM console_attachments WHERE id=?',(aid,));result={'removed':True}
                 elif path.startswith('/api/connectors/'):
                     parts=path.strip('/').split('/')
                     if len(parts)!=4: return self.send(404,{'error':'Not found'})
@@ -116,7 +124,7 @@ def make_server(state,port=8765,console=None):
                     if len(parts)!=4 or parts[:2]!=['api','chats']: return self.send(404,{'error':'Not found'})
                     cid,action=parts[2:]
                     if action=='answers': result=service.answer(cid,payload.get('answers'),payload.get('intervention_id'))
-                    elif action=='messages': result=service.message(cid,payload.get('message'))
+                    elif action=='messages': result=service.message(cid,payload.get('message'),payload.get('attachments'))
                     elif action=='control': result=service.control(cid,payload.get('action'))
                     elif action=='preview': result=previews.open(cid,payload.get('entry'))
                     else: return self.send(404,{'error':'Not found'})

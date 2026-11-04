@@ -1,4 +1,5 @@
 import tempfile,time,unittest
+from unittest.mock import patch
 from pathlib import Path
 from collective101.console import MissionConsole
 from chat_test_provider import ChatTestProvider
@@ -47,8 +48,30 @@ class EffectivenessTests(unittest.TestCase):
         self.assertEqual(scorecard([{**rows[0],'critical':True,'passed':False}])['verdict'],'needs_improvement')
         self.assertEqual(scorecard([{**r,'evidence_mode':'fixture'} for r in rows])['verdict'],'untested')
     def test_run_validation_does_not_start_unbounded_or_unknown_cases(self):
-        for payload in [{'cases':['intake-greeting'],'trials':99}, {'cases':['missing'],'trials':1}, {'cases':[],'trials':1}, {'cases':['intake-greeting'],'trials':1,'max_calls':10000}]:
+        for payload in [{'cases':['intake-greeting'],'trials':0}, {'cases':['missing'],'trials':1}, {'cases':[],'trials':1}, {'cases':['intake-greeting'],'trials':1,'max_calls':-1}]:
             with self.subTest(payload=payload), self.assertRaises(ValueError):self.console.evaluations.start({**payload,'confirm_live':True})
+
+    def test_all_registered_cases_can_be_queued_with_bounded_modes_trials_and_spend(self):
+        service=self.console.evaluations;cases=list(service.cases)
+        self.assertGreater(len(cases),12)
+        modes=['specialist','generalist','memory_off','memory_on']
+        with patch.object(service.pool,'submit') as dispatch:
+            report=service.start({'cases':cases,'modes':modes,'trials':3,'confirm_live':True,'max_calls':160,'max_units':2_000_000})
+        self.assertEqual(len(report['trials']),len(cases)*len(modes)*3)
+        self.assertEqual(set(report['configuration']['case_snapshots']),set(cases))
+        self.assertEqual(report['configuration']['max_calls'],160)
+        self.assertEqual(report['configuration']['max_units'],2_000_000)
+        self.assertEqual(report['calls'],0);dispatch.assert_called_once()
+
+    def test_all_case_support_does_not_allow_malformed_ids_or_unsupported_team_comparisons(self):
+        service=self.console.evaluations
+        payloads=[{'cases':[['intake-greeting']]},{'cases':['intake-greeting',23]},
+                  {'cases':['intake-greeting','intake-greeting']},
+                  {'cases':list(service.cases),'modes':['specialist','organization']}]
+        with patch.object(service.pool,'submit') as dispatch:
+            for payload in payloads:
+                with self.subTest(payload=payload),self.assertRaises(ValueError):service.start({**payload,'confirm_live':True})
+            dispatch.assert_not_called()
     def test_comparison_pairs_matching_trials_and_excludes_infrastructure(self):
         from collective101.effectiveness import paired_comparison
         trials=[{'case_id':'a','trial':1,'mode':'memory_off','tokens':20,'seconds':2,'result':{'passed':False}},

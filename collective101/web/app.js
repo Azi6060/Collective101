@@ -1,7 +1,7 @@
 'use strict';
 let selectedSource=null,progressStarted=null,inspectorChat=null,previewOpening=false,previewChat=null;
-let evaluationPage=null,selectedEvaluation=null,evaluationBusy=false;
-const phaseLabels={assess:'Assessing the task',coordinate:'Aligning the departments',select:'Selecting the team',work:'Creating the deliverable',report:'Gathering saved work',review_assignment:'Assigning a reviewer',review:'Checking the result',retrospective:'Preparing your result'};
+
+const phaseLabels={help_decision:'Reviewing a request for help',help:'Consulting another department',replan:'Revising the team',assess:'Assessing the task',coordinate:'Aligning the departments',select:'Selecting the team',work:'Creating the deliverable',report:'Gathering saved work',review_assignment:'Assigning a reviewer',review:'Checking the result',retrospective:'Preparing your result'};
 function saveBlob(blob,filename){const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function showSource(file){
   selectedSource=file;$('file-viewer-title').textContent=file.path;$('file-source').textContent=file.content;
@@ -41,12 +41,13 @@ function renderWorkspace(chat){
   if(chat?.run_id&&inspectorChat!==chat.id){inspectorChat=chat.id;if(innerWidth>=1280){$('chat-inspector').open=true;document.body.classList.add('inspector-open');}}
   const limits=state.health?.limits,p=state.health?.model_configuration?.request_policy;
   $('chat-limits-info').replaceChildren();
-  if(chat?.context)$('chat-limits-info').append(element('p','',`${chat.context.saved_messages} messages saved · ${chat.context.history_bytes.toLocaleString()} bytes in the current history window${chat.context.history_compacted?' · earlier turns windowed':''}`));
+  if(chat?.context)$('chat-limits-info').append(element('p','',`${chat.context.saved_messages} messages saved · ${chat.context.history_bytes.toLocaleString()} bytes in the last request history window${chat.context.history_compacted?' · earlier turns windowed':''}`));
+  if(chat?.context?.last_request?.input_tokens)$('chat-limits-info').append(element('p','',`${chat.context.last_request.input_tokens.toLocaleString()} input tokens measured by Meta for the last large request; output space and a prompt-format margin are reserved.`));
   if(limits){
     for(const line of [`Message: ${limits.message_characters.toLocaleString()} characters`,`Per-request input: ${limits.request_input_bytes.toLocaleString()} UTF-8 bytes (conservative admission)`,
       `Chat history window sent: ${limits.history_window_bytes.toLocaleString()} bytes; full history remains saved`,
       limits.provider_context_tokens?`Model context window: ${limits.provider_context_tokens.toLocaleString()} tokens`:'Model context window: provider-dependent',
-      `Output cap: ${(p?.max_output_tokens||32768).toLocaleString()} tokens, including reasoning`,`Temperature: ${p?.temperature??1} · intake reasoning low / work medium`,
+      `Output cap: ${(p?.max_output_tokens||131072).toLocaleString()} tokens, including reasoning`,`Temperature: ${p?.temperature??1} · reasoning high for every agent`,
       `Retries per step: ${limits.provider_failures_per_step} provider failures, ${limits.truncations_per_step} truncations, ${limits.validation_failures_per_step} validation failures; ${limits.requests_per_step} requests maximum`,
       `Repair rounds: ${limits.repair_rounds_default} by default, ${limits.repair_rounds_max} maximum; shared chat budget applies`])$('chat-limits-info').append(element('p','',line));
   }
@@ -69,61 +70,8 @@ async function openPreview(entry=null){
   }catch(error){if(tab)tab.close();notice(error.message);}
   finally{previewOpening=false;renderWorkspace(state.chat);}
 }
-function renderEvaluationAgents(){
-  if(!evaluationPage)return;const query=$('evaluation-search').value.toLowerCase();
-  const rows=evaluationPage.agents.filter(a=>(a.name+' '+a.id+' '+a.department+' '+a.verdict).toLowerCase().includes(query));
-  $('evaluation-agents').replaceChildren(...rows.map(agent=>{const row=element('tr');const name=element('td');name.append(element('strong','',agent.name),element('small','d-block text-secondary',agent.id+' · '+agent.department));const evidence=element('td','',agent.graded_trials?`${agent.successes}/${agent.graded_trials} graded · ${agent.distinct_cases} cases`:'No graded live evidence');if(agent.evidence_profile?.model)evidence.append(element('small','d-block text-secondary','Last tested: '+agent.evidence_profile.model+' ? '+agent.evidence_profile.suite));if(agent.human_pending)evidence.append(element('small','d-block',agent.human_pending+' awaiting human review'));if(agent.confidence_low!==null)evidence.append(element('small','d-block text-secondary',`Descriptive interval ${Math.round(agent.confidence_low*100)}–${Math.round(agent.confidence_high*100)}%`));row.append(name,evidence,element('td','evaluation-verdict '+agent.verdict,agent.verdict.replaceAll('_',' ')));return row;}));
-  if(!rows.length){const row=element('tr');const cell=element('td','','No agents match your search.');cell.colSpan=3;row.append(cell);$('evaluation-agents').append(row);}
-}
-async function showEvaluation(id){
-  selectedEvaluation=id;
-  try{
-    const report=await api('/api/evaluations/'+id);const signature=JSON.stringify(report);if($('evaluation-detail').dataset.signature===signature)return;
-    $('evaluation-detail').dataset.signature=signature;const box=$('evaluation-detail');box.replaceChildren(element('h3','',report.id),element('p','small text-secondary',`${report.status} · ${report.calls} calls · ${report.tokens.toLocaleString()} reported tokens · ${report.metadata.provider} / ${report.metadata.model||'scripted provider'} · ${report.metadata.suite}`));
-    if(['queued','running'].includes(report.status))box.append(action('Stop after the current request',async()=>{try{await api('/api/evaluations/'+id+'/stop',{});await refreshEvaluations();}catch(error){notice(error.message);}}));
-    if(report.error)box.append(element('p','text-danger',report.error));
-    for(const comparison of report.comparisons||[]){const panel=element('div','alert alert-light small');panel.append(element('strong','',comparison.baseline.replaceAll('_',' ')+' ? '+comparison.treatment.replaceAll('_',' ')),element('p','mb-1',`${comparison.paired_trials} graded pairs ? ${comparison.distinct_cases} cases ? ${comparison.wins} wins / ${comparison.losses} losses / ${comparison.ties} ties`),element('p','mb-1',`Mean change: ${comparison.mean_token_difference?.toFixed(0)} tokens ? ${comparison.mean_seconds_difference?.toFixed(2)}s${comparison.memory_sources===0?' ? No reviewed memory was available in the treatment':''}`),element('small','text-secondary',comparison.scope));box.append(panel);}
-
-    for(const trial of report.trials){
-      const result=trial.result;const card=element('details','evaluation-trial');const title=evaluationPage?.cases.find(c=>c.id===trial.case_id)?.title||trial.case_id;
-      card.append(element('summary','',`${title} · ${trial.mode.replaceAll('_',' ')} · ${result?.human_pending?'Needs human review':result?.passed===true?'Passed':result?.passed===false?'Failed':trial.status}`));
-      card.append(element('p','small text-secondary',`${trial.agent_id} · trial ${trial.trial} · ${trial.calls} calls · ${trial.tokens} tokens · ${trial.seconds}s${result?.failure_kind?' · '+result.failure_kind:''}`));
-      if(result){const content=element('pre','evaluation-output',JSON.stringify(result,null,2));card.append(content);}
-      if(result?.requires_human){
-        const form=element('form','evaluation-human-review');const label=element('label','form-label','Independent quality review: explain the evidence');const note=element('textarea','form-control');note.id='review-note-'+trial.id;note.maxLength=2000;note.required=true;note.rows=2;label.htmlFor=note.id;
-        const accept=element('button','btn btn-outline-success btn-sm mt-2','Meets the quality rubric');accept.type='submit';const reject=element('button','btn btn-outline-secondary btn-sm mt-2','Needs improvement');reject.type='button';
-        async function save(accepted){if(!note.reportValidity())return;try{await api('/api/evaluation-trials/'+trial.id+'/review',{accepted,note:note.value});await refreshEvaluations();}catch(error){notice(error.message);}}
-        form.addEventListener('submit',event=>{event.preventDefault();save(true);});reject.addEventListener('click',()=>save(false));form.append(label,note,accept,reject);card.append(form);
-      }
-      if(trial.requests.length){const records=element('pre','evaluation-output',JSON.stringify(trial.requests,null,2));const disclosure=element('details');disclosure.append(element('summary','','Request diagnostics'),records);card.append(disclosure);}
-      box.append(card);
-    }
-  }catch(error){$('evaluation-detail').replaceChildren(element('p','text-danger',error.message));}
-}
-async function refreshEvaluations(){
-  if(evaluationBusy)return;evaluationBusy=true;
-  try{
-    evaluationPage=await api('/api/evaluations');const data=evaluationPage;
-    const live=data.agents.reduce((sum,a)=>sum+a.live_trials,0),unrated=data.agents.filter(a=>a.verdict==='untested').length;
-    $('evaluation-notice').textContent=`${data.agents.length} identities · ${unrated} untested · ${live} specialist live trials. Fixtures never count toward effectiveness.`;
-    $('evaluation-policy').textContent=data.policy.criterion+' '+data.policy.limits;
-    $('evaluation-model').textContent=state.health?.live_configured?'Model: '+(state.health.model_configuration?.model||'configured provider'):'Connect a live model before starting a benchmark.';
-    $('start-evaluation').disabled=!state.health?.live_configured||data.runs.some(r=>['queued','running'].includes(r.status));
-    if(!$('evaluation-cases').children.length){
-      $('evaluation-cases').replaceChildren(...data.cases.map(c=>{const label=element('label','evaluation-case');const check=element('input');check.type='checkbox';check.value=c.id;check.name='evaluation-case';const text=element('span');text.append(element('strong','',c.title),element('small','d-block',c.agent_id+' · '+c.criteria.join('; ')));label.append(check,text);return label;}));
-    }
-    renderEvaluationAgents();
-    const memory=await api('/api/lessons');$('memory-evidence').replaceChildren(...(memory.lessons.length?memory.lessons.map(lesson=>{const box=element('details','evaluation-trial');box.append(element('summary','',lesson.agent_id+' · '+lesson.status+' · '+lesson.situation),element('p','small',lesson.action),element('p','small','Observed: '+lesson.outcome),element('p','small text-secondary','Limits: '+lesson.limitations+' · evidence '+lesson.evidence_run+' · expires '+lesson.expires_at.slice(0,10)));const note=element('input','form-control');note.placeholder='Evidence note for your review';note.setAttribute('aria-label','Review note for '+lesson.id);note.maxLength=2000;const controls=element('div','d-flex gap-2 mt-2');async function review(accepted){if(!note.value.trim()){notice('Add a short evidence note before reviewing the lesson.');return;}try{await api('/api/lessons/'+lesson.id+'/review',{accepted,note:note.value});await refreshEvaluations();}catch(error){notice(error.message);}}controls.append(action('Approve as reference',()=>review(true)),action('Reject / revoke',()=>review(false)));box.append(note,controls);return box;}):[element('p','small text-secondary','No reviewed lessons yet. Memory experiments use a frozen snapshot and do not write evaluation answers back into operational memory.')]));
-    $('evaluation-runs').replaceChildren(...(data.runs.length?data.runs.map(run=>{const button=action('',()=>showEvaluation(run.id),'evaluation-run');button.append(element('strong','',run.id),element('span','',run.status+' · '+run.calls+' calls · '+run.tokens+' tokens'));return button;}):[element('p','text-secondary small','No evaluations yet. Choose a small case set and a call cap to begin.')]));
-    for(const proposal of memory.proposals||[]){const box=element('details','evaluation-trial');box.append(element('summary','','Proposed experiment ? '+proposal.recipient),element('p','small',proposal.content.change),element('p','small','Evidence: '+proposal.content.evidence),element('p','small','Measure: '+proposal.content.measure),element('small','text-secondary','Proposal only ? '+proposal.run_id+' ? '+proposal.provider.mode+'. No role, prompt or permission was changed.'));$('memory-evidence').append(box);}
-    if(selectedEvaluation)await showEvaluation(selectedEvaluation);
-  }catch(error){$('evaluation-notice').textContent='Could not load evaluation evidence: '+error.message;}
-  finally{evaluationBusy=false;}
-}
 function initChatWorkspace(){
-  $('lesson-form').addEventListener('submit',async event=>{event.preventDefault();try{await api('/api/lessons',{run_id:$('lesson-run').value,agent_id:$('lesson-agent').value,situation:$('lesson-situation').value,action:$('lesson-action').value,outcome:$('lesson-outcome').value,limitations:$('lesson-limitations').value});$('lesson-form').reset();await refreshEvaluations();}catch(error){notice(error.message);}});
-  $('evaluation-search').addEventListener('input',renderEvaluationAgents);$('refresh-evaluations').addEventListener('click',refreshEvaluations);
-  $('evaluation-form').addEventListener('submit',async event=>{event.preventDefault();const button=$('start-evaluation');button.disabled=true;try{const cases=[...document.querySelectorAll('[name="evaluation-case"]:checked')].map(c=>c.value),modes=[...document.querySelectorAll('[name="evaluation-mode"]:checked')].map(c=>c.value);const run=await api('/api/evaluations',{cases,modes,trials:Number($('evaluation-trials').value),max_calls:Number($('evaluation-calls').value),confirm_live:$('evaluation-confirm').checked});selectedEvaluation=run.id;$('evaluation-confirm').checked=false;await refreshEvaluations();}catch(error){notice(error.message);button.disabled=!state.health?.live_configured;}});
+  initAttachments();
   document.querySelectorAll('.sidebar .nav [data-nav]').forEach(link=>{
     const text=[...link.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim().replace('Mission chat','Chat');
     [...link.childNodes].filter(n=>n.nodeType===3).forEach(n=>n.remove());
@@ -158,9 +106,9 @@ function initChatWorkspace(){
 // Organization console and chat orchestration UI.
 'use strict';
 const $ = id => document.getElementById(id);
-const state = {token:null,roster:null,health:null,chats:[],chat:null,activity:null,view:'overview',chatSignature:'',activitySignature:'',pendingRequest:null};
-const paths = {overview:'/',organization:'/organization',chat:'/chat',activity:'/activity',connectors:'/connectors',evaluations:'/evaluations'};
-const labels = {overview:'Overview',organization:'Organization',chat:'Chat',activity:'Activity & evidence',connectors:'Connectors',evaluations:'Effectiveness'};
+const state = {token:null,roster:null,health:null,chats:[],chat:null,activity:null,view:'overview',chatSignature:'',activitySignature:'',pendingRequest:null,selectedAgent:null};
+const paths = {overview:'/',organization:'/organization',chat:'/chat',activity:'/activity',connectors:'/connectors'};
+const labels = {overview:'Overview',organization:'Organization',chat:'Chat',activity:'Activity & evidence',connectors:'Connectors'};
 initChatWorkspace();
 function element(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;}
 function pill(status){return element('span','state-pill '+status,status.replaceAll('_',' '));}
@@ -170,15 +118,13 @@ async function api(path,body){
   const response=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'X-Console-Token':state.token,...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body)});
   const result=await response.json();if(!response.ok)throw new Error(result.error||'Request failed');return result;
 }
-function navigate(view,push=true){state.view=view;document.body.classList.toggle('chat-view',view==='chat');document.querySelectorAll('.view').forEach(node=>node.classList.toggle('d-none',node.id!=='view-'+view));document.querySelectorAll('[data-nav]').forEach(node=>node.classList.toggle('active',node.dataset.nav===view));$('breadcrumb').textContent=labels[view];if(push)history.pushState({},'',paths[view]);if(view==='activity')refreshActivity();if(view==='connectors')refreshConnectors();if(view==='evaluations')refreshEvaluations();}
-function newMission(){state.chat=null;state.chatSignature='';state.pendingRequest=null;inspectorChat=null;$('chat-inspector').open=false;document.body.classList.remove('inspector-open');sessionStorage.removeItem('collective-chat');renderChat();navigate('chat');$('mission-input').focus();}
+function navigate(view,push=true){if(view!=='chat')cancelVoiceRecording();state.view=view;document.body.classList.toggle('chat-view',view==='chat');document.querySelectorAll('.view').forEach(node=>node.classList.toggle('d-none',node.id!=='view-'+view));document.querySelectorAll('[data-nav]').forEach(node=>node.classList.toggle('active',node.dataset.nav===view));$('breadcrumb').textContent=labels[view];if(push)history.pushState({},'',paths[view]);if(view==='activity')refreshActivity();if(view==='connectors')refreshConnectors();}
+function newMission(){cancelVoiceRecording();$('mission-input').value='';growComposer();state.chat=null;state.chatSignature='';state.pendingRequest=null;state.selectedAgent=null;clearPendingAttachments();inspectorChat=null;$('chat-inspector').open=false;document.body.classList.remove('inspector-open');sessionStorage.removeItem('collective-chat');renderChat();navigate('chat');$('mission-input').focus();}
 function prettyAgent(id){return state.roster?.agents.find(agent=>agent.id===id)?.name||id;}
 function modelSource(config){return !config?'Configuration source unavailable until server restart':config.credential_source==='environment'?'Server environment':config.credential_source==='saved_connector'?'Saved connector':'No credential detected';}
-function requiresRestart(){return !!state.health&&!state.health.features?.chat_workspace;}
+function requiresRestart(){return !!state.health&&(!state.health.features?.chat_workspace||!state.health.features?.unlimited_spending||!state.health.features?.attachments||!state.health.features?.agent_chat||!state.health.features?.media_previews);}
 function renderHealth(){
   const h=state.health,c=h.model_configuration;
-  const units=$('budget-tokens'),cap=h.limits?.max_admission_units_per_chat;
-  if(cap){units.max=String(cap);if(Number(units.value)>cap)units.value=String(cap);}
   $('connection-status').textContent='Workspace connected · '+(h.version||'older server');
   document.querySelector('.version-label').textContent='COLLECTIVE 101 / '+(h.version||'older server');
   if(requiresRestart())notice('The running server is '+h.version+'. Restart through your secrets-manager launcher to activate the new chat and delivery fixes, then refresh. New requests are disabled until then.');
@@ -195,7 +141,7 @@ function renderModelConfiguration(){
     element('p','mb-2',`Credential source: ${modelSource(c)}. Settings: ${c.settings_source==='saved_connector'?'Saved connector':'Environment / defaults'}.`));
   if(c.credential_source==='environment')panel.append(element('p','small text-secondary','The running server received MODEL_API_KEY from its environment, which may be supplied by a secrets manager. The app cannot identify which extension supplied it.'));
   const p=c.request_policy||{};
-  if(p.max_output_tokens)panel.append(element('p','small mb-2',`Generation cap: ${p.max_output_tokens.toLocaleString()} tokens per request, including reasoning. Work timeout: ${p.timeout_seconds} seconds; bounded retry timeout up to 300 seconds. Phase limits and shared mission budgets apply.`));
+  if(p.max_output_tokens)panel.append(element('p','small mb-2',`Generation cap: ${p.max_output_tokens.toLocaleString()} tokens per request, including reasoning. Work timeout: ${p.timeout_seconds} seconds; bounded retry timeout up to 900 seconds. Phase limits and shared mission budgets apply.`));
   panel.append(element('p','small text-secondary mb-0','Configuration presence is not a verified connection. Provider errors appear when a request is sent.'));
   if(c.error)panel.append(element('p','text-danger mb-0',c.error));
 }
@@ -212,18 +158,18 @@ function renderChats(){
   select.value=old||state.chat?.run_id||'';
 }
 function showAgent(id){
-  const agent=state.roster.agents.find(a=>a.id===id);const panel=$('agent-inspector');panel.classList.remove('d-none');
+  const agent=state.roster.agents.find(a=>a.id===id),panel=$('agent-inspector');panel.classList.remove('d-none');
+  const department=state.roster.departments.find(d=>d.id===agent.department);
   const top=element('div','section-heading');top.append(element('h2','',agent.name),action('Close',()=>panel.classList.add('d-none')));
-  const info=element('div','agent-details');info.append(element('p','',`${agent.id} · ${agent.department} · ${agent.role.replaceAll('_',' ')}`),element('p','',`Reports to: ${agent.reports_to?prettyAgent(agent.reports_to):'Mission owner'}`));
-  if(agent.responsibility)info.append(element('p','',`Responsibility: ${agent.responsibility.level.replaceAll('_',' ')} | ${agent.responsibility.distinct_verified_missions} distinct verified live missions. Role and tool access are unchanged.`));
-  agent.responsibilities.forEach(r=>info.append(element('p','',r)));
-  info.append(element('strong','','Role instructions'),element('pre','',agent.system_prompt),element('p','',`Declared skills: ${agent.skills.join(', ')}. Tool access is enforced separately by the runtime.`));
-  info.append(element('strong','','Eligible tools (assignment and mission permission still required)'));
-  (agent.tools||[]).forEach(tool=>info.append(element('p','',`${tool.name}: ${tool.available?'ready':'unconfigured'} ? ${tool.scope}`)));
-  info.append(element('p','',`Memory: stable role instructions, current mission context, and own reviewed episodes ranked by relevance. Knowledge files: shared/ and ${agent.department}/.`));
-  info.append(action('View recorded activity',()=>{$('activity-agent').value=agent.id;navigate('activity');}));
+  const info=element('div','agent-details');info.append(element('p','agent-department',department?.name||'Organization leadership'),element('p','',agent.charter));
+  const duties=element('ul','agent-responsibilities');for(const r of agent.responsibilities)duties.append(element('li','',r));info.append(duties);
+  info.append(element('p','agent-reporting',agent.reports_to?'Works with '+prettyAgent(agent.reports_to):'Coordinates department heads'));
+  const tools=(agent.tools||[]).filter(t=>t.available);info.append(element('p','text-secondary',tools.length?tools.length+' connected capabilities available when assigned to relevant work.':'Can reason and draft from supplied information.'));
+  info.append(action('Chat with '+agent.name,()=>startAgentChat(agent.id),'btn btn-primary'),element('p','small text-secondary mt-2','Ask about this agent specialty. Use organization chat for coordinated work and saved deliverables.'));
   panel.replaceChildren(top,info);panel.focus();panel.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
+function startAgentChat(id){newMission();state.selectedAgent=id;renderAgentContext();$('mission-input').focus();}
+function renderAgentContext(){const id=state.chat?.agent_id||state.selectedAgent;$('agent-chat-context').hidden=!id;$('agent-chat-name').textContent=id?prettyAgent(id):'';if(id)$('mission-input').placeholder='Message '+prettyAgent(id)+'...';}
 function agentRow(agent){const row=element('div','agent-row');const copy=element('div');copy.append(element('strong','',agent.name),element('p','',agent.id+' · '+agent.role.replaceAll('_',' ')));row.append(element('span','agent-avatar',agent.name.split(' ').map(s=>s[0]).slice(0,2).join('')),copy,action('View role',()=>showAgent(agent.id)));return row;}
 function showDepartment(department){
   $('agent-search').value='';$('department-grid').classList.add('d-none');const panel=$('search-results');panel.classList.remove('d-none');const heading=element('div','section-heading');heading.append(element('h2','',department.name),action('All departments',()=>{panel.classList.add('d-none');$('department-grid').classList.remove('d-none');}));panel.replaceChildren(heading,...state.roster.agents.filter(a=>a.department===department.id).map(agentRow));
@@ -235,29 +181,33 @@ function renderOrganization(){
   }));
 }
 function searchOrganization(){const query=$('agent-search').value.trim().toLowerCase();$('department-grid').classList.toggle('d-none',!!query);$('search-results').classList.toggle('d-none',!query);if(query){const matches=state.roster.agents.filter(a=>`${a.name} ${a.department} ${a.id} ${a.role}`.toLowerCase().includes(query));$('search-results').replaceChildren(element('h2','',`${matches.length} matching agents`),...matches.map(agentRow));}}
-async function selectChat(id){try{state.chat=await api('/api/chats/'+id);sessionStorage.setItem('collective-chat',id);state.chatSignature='';renderChat();navigate('chat');if(state.chat.run_id)$('activity-mission').value=state.chat.run_id;}catch(error){notice(error.message);}}
+async function selectChat(id){cancelVoiceRecording();try{state.chat=await api('/api/chats/'+id);state.selectedAgent=state.chat.agent_id||null;clearPendingAttachments();sessionStorage.setItem('collective-chat',id);state.chatSignature='';renderChat();navigate('chat');if(state.chat.run_id)$('activity-mission').value=state.chat.run_id;}catch(error){notice(error.message);}}
 function renderChat(){
   const chat=state.chat;const signature=JSON.stringify(chat);if(signature===state.chatSignature)return;state.chatSignature=signature;
-  const busy=!!chat&&['intake','running','clarifying','needs_input','paused','interrupted'].includes(chat.status);$('send-mission').disabled=busy||requiresRestart();$('mission-input').placeholder=requiresRestart()?'Restart the server to activate this chat update':busy?'Your organization is working...':'Message your organization...';$('chat-status').textContent=chat?chat.status.replaceAll('_',' '):'Ready for a chat';
+  const busy=!!chat&&['intake','running','clarifying','needs_input','paused','interrupted'].includes(chat.status);$('send-mission').disabled=busy||requiresRestart();$('mission-input').placeholder=requiresRestart()?'Restart the server to activate this chat update':busy?'Your organization is working...':'Message your organization...';$('chat-status').textContent=chat?chat.status.replaceAll('_',' '):'Ready for a chat';renderAgentContext();
   const hint=chat?.progress?.label||'';$('chat-progress').classList.toggle('d-none',!hint);$('chat-progress-label').textContent=hint;
   const thread=$('chat-thread');const atBottom=thread.scrollHeight-thread.scrollTop-thread.clientHeight<70;
   const messages=$('chat-messages');
-  const transcriptSignature=JSON.stringify([chat?.id,chat?.transcript,chat?.error]);
+  const transcriptSignature=JSON.stringify([chat?.id,chat?.transcript,chat?.attachments?.map(a=>[a.id,a.filename,a.relative_path]),chat?.error]);
   if(messages.dataset.signature!==transcriptSignature){
     messages.dataset.signature=transcriptSignature;
-  if(chat){messages.replaceChildren(...chat.transcript.map(message=>{const bubble=element('div','message '+message.role),body=element('div',message.role==='assistant'?'markdown-body':'message-content');const text=(message.display_content||message.content).replace(/^Mission brief:/,'Plan:');if(message.role==='assistant'&&typeof markdownFragment==='function')body.append(markdownFragment(text));else{body.classList.add('markdown-fallback');body.textContent=text;}bubble.append(element('span','message-label',message.role==='user'?'YOU':'COLLECTIVE'),body);return bubble;}));if(chat.error&&['blocked','interrupted'].includes(chat.status))messages.append(element('div','alert alert-danger',chat.error));
+  if(chat){if(messages.dataset.chatId!==chat.id){messages.replaceChildren();messages.dataset.chatId=chat.id;}
+    chat.transcript.forEach((message,index)=>{const signature=JSON.stringify(message),existing=messages.children[index];if(existing?.dataset.message===signature)return;
+    const bubble=element('div','message '+message.role),body=element('div',message.role==='assistant'?'markdown-body':'message-content');const text=(message.display_content||message.content).replace(/^Mission brief:/,'Plan:');if(message.role==='assistant'&&typeof markdownFragment==='function')body.append(markdownFragment(text));else{body.classList.add('markdown-fallback');body.textContent=text;}bubble.append(element('span','message-label',message.role==='user'?'YOU':chat.agent_id?prettyAgent(chat.agent_id):'COLLECTIVE'),body);appendMessageAttachments(bubble,message,chat);bubble.dataset.message=signature;if(existing)existing.replaceWith(bubble);else messages.append(bubble);});
+    while(messages.children.length>chat.transcript.length)messages.lastElementChild.remove();if(chat.error&&['blocked','interrupted'].includes(chat.status))messages.append(element('div','alert alert-danger',chat.error));
   }else{const welcome=element('div','chat-welcome');welcome.append(element('span','welcome-glyph','✳'),element('h2','','What do you want to accomplish?'),element('p','','Start with the outcome. If something important is missing, we’ll ask before proceeding.'));messages.replaceChildren(welcome);}
   }
+  document.querySelectorAll('[data-attachment-id]').forEach(card=>{const item=chat?.attachments?.find(a=>a.id===card.dataset.attachmentId),label=card.querySelector('.attachment-state');if(item&&label)label.textContent=item.status==='ready'?'Ready':item.status==='failed'?'Could not read':item.status==='processing'?'Reading...':'Waiting to read';});
   const interventions=$('intervention-area');interventions.replaceChildren();
   if(chat?.status==='clarifying')interventions.append(questionForm(chat.questions));
   if(chat?.status==='needs_input')chat.interventions.filter(q=>q.status==='pending').forEach(q=>interventions.append(questionForm([q.question],q)));
   $('brief-title').textContent=chat?.brief?'The agreed outcome':'Intent comes first.';
   const brief=$('brief-content');brief.replaceChildren();
-  if(chat?.brief){brief.append(element('p','',chat.brief.objective));const criteria=element('ul');chat.brief.acceptance_criteria.forEach(c=>criteria.append(element('li','',c)));brief.append(element('strong','mini-label','SUCCESS CRITERIA'),criteria,element('p','text-secondary',`Mode: ${chat.mode==='fixture'?'Demo — scripted model responses':'Live Meta inference'}`));if(chat.run)brief.append(element('p','text-secondary',`${chat.run.calls} / ${chat.run.max_calls} model requests · ${chat.run.tokens} reported tokens`));}
+  if(chat?.brief){brief.append(element('p','',chat.brief.objective));const criteria=element('ul');chat.brief.acceptance_criteria.forEach(c=>criteria.append(element('li','',c)));brief.append(element('strong','mini-label','SUCCESS CRITERIA'),criteria,element('p','text-secondary',`Mode: ${chat.mode==='fixture'?'Demo — scripted model responses':'Live Meta inference'}`));if(chat.run)brief.append(element('p','text-secondary',`${chat.run.calls} model requests · ${chat.run.tokens} reported tokens`));}
   else brief.append(element('p','text-secondary','Your agreed objective and success criteria will appear here.'));
   if(chat?.brief)brief.append(element('p','',`Initially routed departments: ${chat.brief.departments?.join(', ')||'all (legacy chat)'}`));
   if(chat?.run?.result)brief.append(element('p','',`Working departments: ${chat.run.result.selected_departments.join(', ')}`));
-  if(chat?.budget)brief.append(element('p','text-secondary',`${chat.budget.calls} / ${chat.budget.max_calls} total provider requests ? ${chat.budget.charged_tokens} / ${chat.budget.max_tokens} token admission units ? ${chat.budget.reported_tokens} reported tokens (intake included)`));
+  if(chat?.budget)brief.append(element('p','text-secondary',`${chat.budget.calls} total provider requests ? ${chat.budget.reported_tokens.toLocaleString()} reported tokens ? unlimited spending (intake included)`));
   renderWorkspace(chat);
   if(atBottom)thread.scrollTop=thread.scrollHeight;
   $('mission-controls').classList.toggle('d-none',!chat?.run_id);$('pause-mission').classList.toggle('d-none',chat?.status!=='running');$('resume-mission').classList.toggle('d-none',!['paused','interrupted'].includes(chat?.status));
@@ -299,14 +249,21 @@ $('start-chat').addEventListener('click',newMission);$('inspect-director').addEv
 function growComposer(){const input=$('mission-input');input.style.height='auto';input.style.height=Math.min(Math.max(input.scrollHeight,48),200)+'px';input.style.overflowY=input.scrollHeight>200?'auto':'hidden';}
 $('mission-input').addEventListener('input',()=>{state.pendingRequest=null;growComposer();});
 $('mission-input').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();if(!$('send-mission').disabled)$('mission-form').requestSubmit();}});
-for(const id of ['budget-calls','budget-tokens'])$(id).addEventListener('change',()=>state.pendingRequest=null);
-$('mission-form').addEventListener('submit',async event=>{event.preventDefault();$('send-mission').disabled=true;try{if(requiresRestart())throw new Error('Restart through your secrets-manager launcher, then refresh before sending a new request.');const message=$('mission-input').value.trim();if(state.chat&&['answered','reviewed','blocked'].includes(state.chat.status)){state.chat=await api('/api/chats/'+state.chat.id+'/messages',{message});}else{state.pendingRequest??=crypto.randomUUID();state.chat=await api('/api/chats',{message,mode:'meta',request_id:state.pendingRequest,max_calls:Number($('budget-calls').value),max_tokens:Number($('budget-tokens').value)});}sessionStorage.setItem('collective-chat',state.chat.id);$('mission-input').value='';growComposer();state.pendingRequest=null;renderChat();notice('');await refresh();}catch(error){notice(error.message);}finally{$('send-mission').disabled=requiresRestart()||(!!state.chat&&['intake','running','clarifying','needs_input','paused','interrupted'].includes(state.chat.status));}});
+$('mission-form').addEventListener('submit',async event=>{event.preventDefault();if(uploadBusy||voiceRecorder)return;const button=$('send-mission');button.disabled=true;try{
+  if(requiresRestart())throw new Error('Restart the local server and refresh before sending a new request to activate attachments and agent chat.');
+  const typed=$('mission-input').value.trim();if(!typed&&!pendingAttachments.length)throw new Error('Write a message or attach a file.');
+  const message=typed||(pendingAttachments.every(a=>a.kind==='audio')?'Please respond to the request in my attached voice message.':'Please review the attached files.'),attachments=pendingAttachments.map(a=>a.id);
+  if(state.chat&&['answered','reviewed','blocked'].includes(state.chat.status))state.chat=await api('/api/chats/'+state.chat.id+'/messages',{message,attachments});
+  else{state.pendingRequest??=crypto.randomUUID();state.chat=await api('/api/chats',{message,attachments,agent_id:state.selectedAgent||undefined,mode:'meta',request_id:state.pendingRequest});}
+  clearPendingAttachments(false);sessionStorage.setItem('collective-chat',state.chat.id);$('mission-input').value='';growComposer();state.pendingRequest=null;renderChat();notice('');await refresh();
+}catch(error){notice(error.message);}finally{button.disabled=requiresRestart()||(!!state.chat&&['intake','running','clarifying','needs_input','paused','interrupted'].includes(state.chat.status));}});
+
 $('activity-agent').addEventListener('change',refreshActivity);$('activity-mission').addEventListener('change',refreshActivity);$('activity-filter').addEventListener('change',refreshActivity);
 $('view-evidence').addEventListener('click',()=>{$('activity-mission').value=state.chat.run_id;navigate('activity');});
 for(const [id,actionName] of [['pause-mission','pause'],['resume-mission','resume']])$(id).addEventListener('click',async()=>{try{state.chat=await api('/api/chats/'+state.chat.id+'/control',{action:actionName});renderChat();if(actionName==='pause')$(id).textContent='Pause requested…';}catch(error){notice(error.message);}});
 window.addEventListener('popstate',()=>navigate(Object.keys(paths).find(k=>paths[k]===location.pathname)||'overview',false));
 let refreshing=false;
-async function refresh(){if(refreshing)return;refreshing=true;try{state.chats=await api('/api/chats');renderChats();if(state.chat){state.chat=await api('/api/chats/'+state.chat.id);renderChat();}if(state.view==='activity')await refreshActivity();if(state.view==='evaluations')await refreshEvaluations();$('connection-status').textContent='Workspace connected';}catch(error){$('connection-status').textContent='Connection interrupted';}finally{refreshing=false;}}
+async function refresh(){if(refreshing)return;refreshing=true;try{state.chats=await api('/api/chats');renderChats();if(state.chat){state.chat=await api('/api/chats/'+state.chat.id);renderChat();}if(state.view==='activity')await refreshActivity();$('connection-status').textContent='Workspace connected';}catch(error){$('connection-status').textContent='Connection interrupted';}finally{refreshing=false;}}
 (async()=>{try{state.token=(await (await fetch('/api/session')).json()).token;[state.roster,state.health]=await Promise.all([api('/api/organization'),api('/api/health')]);renderHealth();renderOrganization();await refresh();const saved=sessionStorage.getItem('collective-chat');if(saved&&state.chats.some(c=>c.id===saved)){state.chat=await api('/api/chats/'+saved);}renderChat();navigate(Object.keys(paths).find(k=>paths[k]===location.pathname)||'overview',false);setInterval(refresh,1500);document.documentElement.dataset.ready='true';}catch(error){notice('Could not connect to the local console: '+error.message);$('connection-status').textContent='Offline';}})();
 
 const connectorCatalog = [
@@ -360,7 +317,7 @@ function editConnector(c){
   $('connector-name').value=c.name;$('connector-url').value=c.url||'';$('connector-model').value=c.model||'';
   $('connector-max-output').value=c.model_options?.max_output_tokens??'';$('connector-timeout').value=c.model_options?.timeout_seconds??'';
   $('connector-temperature').value=c.model_options?.temperature??'';
-  $('connector-max-output').placeholder=String(state.health.model_configuration?.request_policy?.max_output_tokens||32768);
+  $('connector-max-output').placeholder=String(state.health.model_configuration?.request_policy?.max_output_tokens||131072);
   $('connector-timeout').placeholder=String(state.health.model_configuration?.request_policy?.timeout_seconds||120);
   $('connector-secret').value='';$('connector-local').checked=!!c.allow_local;connectorFields();
   $('connector-setup').classList.remove('d-none');$('connector-name').focus();

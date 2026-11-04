@@ -8,7 +8,7 @@ from collective101 import budgets
 
 class ContextLimitsTests(unittest.TestCase):
     def test_history_window_keeps_initial_intent_latest_turn_and_originals(self):
-        transcript=[{'role':'user','content':'Build a grocery landing page'}]+[{'role':'assistant' if i%2 else 'user','content':str(i)+'x'*6000} for i in range(30)]+[{'role':'user','content':'Continue with the saved design'}]
+        transcript=[{'role':'user','content':'Build a grocery landing page'}]+[{'role':'assistant' if i%2 else 'user','content':str(i)+'x'*110000} for i in range(30)]+[{'role':'user','content':'Continue with the saved design'}]
         before=json.dumps(transcript);window=history_window(transcript)
         self.assertLessEqual(input_bytes(window),MAX_HISTORY_BYTES)
         self.assertEqual(window[0],transcript[0]);self.assertEqual(window[-1],transcript[-1])
@@ -40,6 +40,6 @@ class ContextLimitsTests(unittest.TestCase):
             build.return_value.open.return_value=BytesIO(json.dumps(body).encode())
             MetaProvider(api_key='test',temperature=.5).complete([{'role':'user','content':'test'}])
             payload=json.loads(build.return_value.open.call_args.args[0].data)
-            self.assertEqual(payload['temperature'],.5);self.assertEqual(payload['max_completion_tokens'],16384)
+            self.assertEqual(payload['temperature'],.5);self.assertEqual(payload['max_completion_tokens'],65536)
         for value in [True,-1,3,float('nan')]:
             with self.assertRaises(ValueError):MetaProvider(api_key='test',temperature=value)

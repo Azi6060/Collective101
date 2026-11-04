@@ -6,7 +6,7 @@ const base=process.env.COLLECTIVE101_TEST_URL;
 assert.ok(base&&process.env.COLLECTIVE101_ISOLATED_TEST==='1','Run npm run test:browser with the isolated Python service');
 assert.notEqual(new URL(base).port,'8765','Never run interaction tests on the user app');
 let browser;
-before(async()=>{browser=await connectBrowser(base,{allowLoopbackPreviews:true});await browser.call('browser_navigate',{url:base+'/chat'});await waitReady(browser);});
+before(async()=>{browser=await connectBrowser(base,{allowLoopbackPreviews:true,fakeMicrophone:true});await browser.call('browser_navigate',{url:base+'/chat'});await waitReady(browser);});
 after(async()=>{await browser?.close();});
 const click=target=>browser.call('browser_click',{target});
 const type=(target,text)=>browser.call('browser_type',{target,text});
@@ -141,7 +141,7 @@ test('organization and connector catalog support search, roles and keyboard dism
   await click('[data-nav="organization"]');
   assert.equal(await inspect(browser,()=>document.querySelectorAll('.department-card').length),10);
   await type('#agent-search','research-003');await click('#search-results button');
-  assert.match(await inspect(browser,()=>document.querySelector('#agent-inspector').textContent),/web_search/);
+  assert.match(await inspect(browser,()=>document.querySelector('#agent-inspector').textContent),/Chat with Source Analyst/);
   await click('[data-nav="connectors"]');
   await waitUntil(browser,()=>document.querySelectorAll('.connector-card').length===9,'connector cards');
   await waitUntil(browser,()=>document.querySelector('#model-configuration').textContent.includes('No credential detected'),'model provenance panel');
@@ -159,20 +159,79 @@ test('organization and connector catalog support search, roles and keyboard dism
   assert.match(errors,/Errors: 0, Warnings: 0/);
 });
 
-test('Effectiveness page shows untested role evidence, explicit credit controls and mobile layout',async()=>{
-  await click('[data-nav="evaluations"]');
-  await waitUntil(browser,()=>document.querySelectorAll('#evaluation-agents tr').length===101,'agent scorecards');
-  assert.match(await inspect(browser,()=>document.querySelector('#evaluation-notice').textContent),/Fixtures never count/);
-  assert.equal(await inspect(browser,()=>document.querySelector('#start-evaluation').disabled),true);
-  assert.equal(await inspect(browser,()=>document.querySelector('#evaluation-confirm').checked),false);
-  await shot('effectiveness-desktop');
-  await type('#evaluation-search','engineering-003');
-  assert.equal(await inspect(browser,()=>document.querySelectorAll('#evaluation-agents tr').length),1);
-  assert.match(await inspect(browser,()=>document.querySelector('#evaluation-agents').textContent),/untested/);
-  await browser.call('browser_resize',{width:390,height:844});
+test('specialist profile is readable and opens a role-specific conversation',async()=>{
+  await click('[data-nav="organization"]');await type('#agent-search','Recovery Planner');await click('#search-results button');
+  assert.equal(await inspect(browser,()=>document.querySelectorAll('#agent-inspector pre').length),0);
+  await shot('agent-profile-v11');await click('#agent-inspector .btn-primary');
+  assert.match(await inspect(browser,()=>document.querySelector('#agent-chat-name').textContent),/Recovery Planner/);
+  await type('#mission-input','Build me a website');await click('#send-mission');
+  await waitUntil(browser,()=>document.querySelector('#chat-status').textContent==='answered','specialist reply');
+  assert.match(await inspect(browser,()=>document.querySelector('.message.assistant').textContent),/Recovery Planner/);
+  await shot('direct-agent-chat-v11');
+  assert.equal(await inspect(browser,()=>document.querySelector('[data-nav="evaluations"]')),null);
+  await click('#organization-chat');assert.equal(await inspect(browser,()=>document.querySelector('#agent-chat-context').hidden),true);
+  await browser.call('browser_resize',{width:390,height:844});await shot('attachments-mobile-v11');
   assert.equal(await inspect(browser,()=>document.documentElement.scrollWidth<=innerWidth),true);
-  await shot('effectiveness-mobile');
   await browser.call('browser_resize',{width:1440,height:1000});
-  const errors=resultText(await browser.call('browser_console_messages',{level:'warning',all:true}));
-  assert.match(errors,/Errors: 0, Warnings: 0/);
+});
+
+
+test('real browser uploads and sends a document, keeps it in history and exposes microphone controls',async()=>{
+  const fs=await import('node:fs/promises');const path=await import('node:path');
+  const fixture=path.resolve('work/playwright/upload-brief-v11.md');await fs.writeFile(fixture,'Brand: GreenBasket. Main CTA: Visit the shop.');
+  await newChat();await click('#attach-files');await click('#attachment-pick-file');await browser.call('browser_file_upload',{paths:[fixture]});
+  await waitUntil(browser,()=>!!document.querySelector('#pending-attachments .attachment-chip'),'uploaded document');
+  await shot('attachment-ready-v11');await type('#mission-input','Hi');await click('#send-mission');
+  await waitUntil(browser,()=>document.querySelector('#chat-status').textContent==='answered','attached document reply');
+  assert.match(await inspect(browser,()=>document.querySelector('.message.user .sent-attachments').textContent),/upload-brief-v11.md/);
+  assert.equal(await inspect(browser,()=>document.querySelector('#record-voice').getAttribute('aria-label')),'Record voice message');
+  await shot('attachment-sent-v11');
+  const errors=resultText(await browser.call('browser_console_messages',{level:'warning',all:true}));assert.match(errors,/Errors: 0, Warnings: 0/);
+});
+
+
+test('microphone recording stops, converts to supported WAV and can be sent and played',async()=>{
+  await newChat();await click('#record-voice');
+  await waitUntil(browser,()=>document.querySelector('#record-voice').classList.contains('recording'),'microphone recording');
+  assert.equal(await inspect(browser,()=>document.querySelector('#send-mission').disabled),true);
+  await waitUntil(browser,()=>/Recording [2-9]/.test(document.querySelector('#upload-status').textContent),'recorded audio');
+  await click('#record-voice');
+  await waitUntil(browser,()=>!!document.querySelector('#pending-attachments .attachment-chip'),'converted WAV attachment');
+  assert.match(await inspect(browser,()=>document.querySelector('#pending-attachments').textContent),/VOICE.*voice-message.wav/);
+  assert.equal(await inspect(browser,()=>!!document.querySelector('#pending-attachments audio')),true);
+  await shot('voice-before-send-v12');
+  await type('#mission-input','Hi');await click('#send-mission');
+  await waitUntil(browser,()=>document.querySelector('#chat-status').textContent==='answered','voice message processed');
+  await click('.sent-attachments .attachment-open');
+  await waitUntil(browser,()=>!!document.querySelector('.sent-attachments audio'),'audio player');
+  await shot('voice-message-v11');
+  const errors=resultText(await browser.call('browser_console_messages',{level:'warning',all:true}));assert.match(errors,/Errors: 0, Warnings: 0/);
+});
+
+
+test('leaving chat cancels microphone capture and new chat clears drafts',async()=>{
+ await newChat();await type('#mission-input','Unsent draft');await click('#record-voice');
+ await waitUntil(browser,()=>document.querySelector('#record-voice').classList.contains('recording'),'capture started');
+ await click('[data-nav="organization"]');await waitUntil(browser,()=>!document.querySelector('#record-voice').classList.contains('recording'),'capture cancelled');
+ await newChat();assert.equal(await inspect(browser,()=>document.querySelector('#mission-input').value),'');
+ assert.equal(await inspect(browser,()=>document.querySelectorAll('#pending-attachments .attachment-chip').length),0);
+});
+
+
+test('photo has a preview before and after send and opens a large preview',async()=>{
+ const fs=await import('node:fs/promises');const path=await import('node:path');const file=path.resolve('work/playwright/photo-fixture-v12.png');
+ await fs.writeFile(file,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAKAAAABkCAIAAACO1KzYAAABBElEQVR4nO3RAQkAIQDAQP0SVjOD/QN8ChHGXYLB5jp70PW9DuAug+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMjjM4zuA4g+MMHm0/cOwBoWNs2LoAAAAASUVORK5CYII=','base64'));
+ await newChat();await click('#attach-files');assert.equal(await inspect(browser,()=>document.querySelector('#attachment-menu').hidden),false);await shot('attachment-chooser-v12');await click('#attachment-pick-photo');await browser.call('browser_file_upload',{paths:[file]});
+ await waitUntil(browser,()=>document.querySelector('#pending-attachments img')?.naturalWidth===160,'decoded pending photo');await shot('photo-before-send-v12');
+ await type('#mission-input','Hi');await click('#send-mission');await waitUntil(browser,()=>document.querySelector('#chat-status').textContent==='answered','photo message');
+ await waitUntil(browser,()=>!!document.querySelector('.sent-attachments img'),'sent photo');await click('.sent-attachments .attachment-thumbnail');
+ assert.equal(await inspect(browser,()=>document.querySelector('#attachment-lightbox').open),true);await shot('photo-lightbox-v12');await click('#close-attachment-preview');
+});
+
+test('folder upload retains supported relative paths and skips hidden configuration',async()=>{
+ const fs=await import('node:fs/promises');const path=await import('node:path');const folder=path.resolve('work/playwright/folder-fixture-v12');await fs.mkdir(path.join(folder,'src'),{recursive:true});await fs.writeFile(path.join(folder,'src/config.json'),'{}');await fs.writeFile(path.join(folder,'notes.md'),'Project notes');await fs.writeFile(path.join(folder,'.env'),'TEST_CANARY_NOT_FOR_UPLOAD=1');
+ await newChat();await click('#attach-files');await click('#attachment-pick-folder');await browser.call('browser_file_upload',{paths:[folder]});
+ await waitUntil(browser,()=>document.querySelectorAll('#pending-attachments .attachment-chip').length===2,'folder source files');
+ const text=await inspect(browser,()=>document.querySelector('#pending-attachments').textContent);assert.match(text,/folder-fixture-v12\/src\/config.json/);assert.doesNotMatch(text,/TEST_CANARY|\.env/);await shot('folder-upload-v12');
+ const errors=resultText(await browser.call('browser_console_messages',{level:'warning',all:true}));assert.match(errors,/Errors: 0, Warnings: 0/);
 });

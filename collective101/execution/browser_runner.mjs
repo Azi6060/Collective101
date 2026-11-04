@@ -17,6 +17,7 @@ try{
   for(const check of options.checks){
     let passed=true,actual=null,error=null;const locator=frame.locator(check.selector);
     try{
+      if(check.viewport)await page.setViewportSize(check.viewport);
       if(check.action==='click')await locator.click({timeout:2000});
       if(check.action==='fill')await locator.fill(check.text,{timeout:2000});
       if('contains' in check){actual=(await locator.innerText({timeout:2000})).slice(0,2000);passed&&=actual.includes(check.contains);}
@@ -24,8 +25,8 @@ try{
       if('visible' in check){actual=await locator.isVisible();passed&&=actual===check.visible;}
       if('count' in check){actual=await locator.count();passed&&=actual===check.count;}
     }catch{passed=false;error='Selector/action failed within its deadline';}
-    checks.push({selector:check.selector,action:check.action||'assert',passed,actual,error});
+    checks.push({selector:check.selector,action:check.action||'assert',passed,actual,error,viewport:page.viewportSize()});
   }
-  process.stdout.write(JSON.stringify({engine:'Chromium isolated static project',passed:checks.every(c=>c.passed)&&errors.length===0,checks,script_errors:errors.slice(0,5),viewport:{width:1280,height:900}}));
+  process.stdout.write(JSON.stringify({engine:'Chromium isolated static project',passed:checks.every(c=>c.passed)&&errors.length===0,checks,script_errors:errors.slice(0,5),viewport:page.viewportSize()}));
 }catch(error){process.stdout.write(JSON.stringify({engine:'Chromium isolated static project',passed:false,checks:[],error:'Isolated browser or page load failed',stage,failure_type:error.name,diagnostic:String(error.message).split('\n').slice(0,3).join(' ').replace(/https?:\/\/\S+/g,'[preview URL]').slice(0,300)}));}
 finally{await browser?.close();}

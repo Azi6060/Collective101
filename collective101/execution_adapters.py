@@ -56,7 +56,10 @@ def validate_files(files,entry):
 def validate_browser_checks(checks):
     if not isinstance(checks,list) or not 1<=len(checks)<=12:raise ValueError('Provide 1 to 12 browser checks')
     for check in checks:
-        if not isinstance(check,dict) or set(check)-{'selector','action','text','contains','equals','visible','count'}:raise ValueError('Unsupported browser check field')
+        if not isinstance(check,dict) or set(check)-{'selector','action','text','contains','equals','visible','count','viewport'}:raise ValueError('Unsupported browser check field')
+        if 'viewport' in check:
+            v=check['viewport']
+            if not isinstance(v,dict) or set(v)!={'width','height'} or any(type(v[k]) is not int for k in v) or not 240<=v['width']<=2560 or not 240<=v['height']<=2160:raise ValueError('Viewport needs bounded width/height dimensions')
         if not isinstance(check.get('selector'),str) or not 1<=len(check['selector'])<=300:raise ValueError('Browser check needs a bounded selector')
         if check.get('action') not in {None,'click','fill'}:raise ValueError('Browser actions are click or fill; arbitrary evaluation/navigation is unavailable')
         if check.get('action')=='fill' and (not isinstance(check.get('text'),str) or len(check['text'])>1000):raise ValueError('Fill needs bounded text')
